@@ -1,0 +1,699 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.media_type }}",
+                    "rightValue": "resort",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and",
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                }
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.media_type }}",
+                    "rightValue": "menu",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and",
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                }
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.media_type }}",
+                    "rightValue": "room",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and",
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                }
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "3d204835-a7f2-4993-b06d-77f1a3e8d7ca",
+      "name": "Switch Media Type1",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        3424,
+        832
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// EDIT THESE URLS: public links to your resort/property photos (pool, garden, ambience, play area)\nconst urls = [\n  'https://REPLACE_WITH_YOUR_IMAGE_HOST/resort-1.jpg',\n  'https://REPLACE_WITH_YOUR_IMAGE_HOST/resort-2.jpg',\n  'https://REPLACE_WITH_YOUR_IMAGE_HOST/resort-3.jpg'\n];\nreturn urls.map(url => ({ json: { to: $('Execute Workflow Trigger').item.json.to, url } }));"
+      },
+      "id": "467dc43e-6aef-4993-8e58-12d7a5f22ad9",
+      "name": "Resort Photo URLs1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3648,
+        672
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// EDIT: public link(s) to your menu image or PDF\nconst urls = [\n  'https://REPLACE_WITH_YOUR_IMAGE_HOST/menu.jpg'\n];\nreturn urls.map(url => ({ json: { to: $('Execute Workflow Trigger').item.json.to, url } }));"
+      },
+      "id": "84eda089-fe3e-471c-99e2-6d33f295adbe",
+      "name": "Menu URL1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3648,
+        832
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// EDIT: map each room_type to its public photo URLs\nconst roomType = ($('Execute Workflow Trigger').item.json.room_type || '').toLowerCase();\nconst photosByType = {\n  'dorm': [\n    'https://REPLACE_WITH_YOUR_IMAGE_HOST/dorm-1.jpg',\n    'https://REPLACE_WITH_YOUR_IMAGE_HOST/dorm-2.jpg'\n  ],\n  'standard cottage': [\n    'https://REPLACE_WITH_YOUR_IMAGE_HOST/standard-1.jpg',\n    'https://REPLACE_WITH_YOUR_IMAGE_HOST/standard-2.jpg'\n  ],\n  'premium cottage': [\n    'https://REPLACE_WITH_YOUR_IMAGE_HOST/premium-1.jpg',\n    'https://REPLACE_WITH_YOUR_IMAGE_HOST/premium-2.jpg'\n  ]\n};\nlet urls = [];\nfor (const key of Object.keys(photosByType)) {\n  if (roomType.includes(key.split(' ')[0])) { urls = photosByType[key]; break; }\n}\nif (urls.length === 0) urls = photosByType['dorm'];\nreturn urls.map(url => ({ json: { to: $('Execute Workflow Trigger').item.json.to, url } }));"
+      },
+      "id": "99a5f947-6fbf-4e7d-9f8e-9a59fbc1b9d7",
+      "name": "Room Photo URLs1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3648,
+        992
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "phoneNumberId": "1230651203470057",
+        "recipientPhoneNumber": "={{ $json.to }}",
+        "messageType": "image",
+        "mediaPath": "byUrl",
+        "additionalFields": {}
+      },
+      "id": "f8129b73-3f98-4aba-ba48-0736d0bb7f13",
+      "name": "Send Resort Image1",
+      "type": "n8n-nodes-base.whatsApp",
+      "typeVersion": 1,
+      "position": [
+        3872,
+        672
+      ],
+      "webhookId": "11f227da-3af1-4682-8a6a-b3e68962d808",
+      "credentials": {
+        "whatsAppApi": {
+          "id": "6dXYy4M17FTnsOY7",
+          "name": "WhatsApp account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "phoneNumberId": "1230651203470057",
+        "recipientPhoneNumber": "={{ $json.to }}",
+        "messageType": "image",
+        "mediaPath": "byUrl",
+        "additionalFields": {}
+      },
+      "id": "3d99689f-dba9-4aa4-8565-3402e65a6029",
+      "name": "Send Menu Image1",
+      "type": "n8n-nodes-base.whatsApp",
+      "typeVersion": 1,
+      "position": [
+        3872,
+        832
+      ],
+      "webhookId": "ddf10418-bbd3-4b8c-b32b-d3871acc5dfc",
+      "credentials": {
+        "whatsAppApi": {
+          "id": "6dXYy4M17FTnsOY7",
+          "name": "WhatsApp account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "phoneNumberId": "1230651203470057",
+        "recipientPhoneNumber": "={{ $json.to }}",
+        "messageType": "image",
+        "mediaPath": "byUrl",
+        "additionalFields": {}
+      },
+      "id": "207f97d7-1e96-460f-b437-a9757ab210df",
+      "name": "Send Room Image1",
+      "type": "n8n-nodes-base.whatsApp",
+      "typeVersion": 1,
+      "position": [
+        3872,
+        992
+      ],
+      "webhookId": "8da94c84-8f89-4fa3-865c-4c19a65641a0",
+      "credentials": {
+        "whatsAppApi": {
+          "id": "6dXYy4M17FTnsOY7",
+          "name": "WhatsApp account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\n\nconst msg = input.messages?.[0];\nconst contact = input.contacts?.[0];\n\nif (!msg) {\n  throw new Error(\"No WhatsApp message found\");\n}\n\nreturn [\n  {\n    json: {\n      from: msg.from,\n      text: msg.text?.body ?? \"\",\n      messageType: msg.type,\n      contactName: contact?.profile?.name ?? \"\",\n      waMessageId: msg.id,\n    },\n  },\n];"
+      },
+      "id": "c0c3da10-56b1-4766-966a-01ea3e9a1c48",
+      "name": "Parse Incoming Message1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3376,
+        1616
+      ]
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $json.from }}",
+        "contextWindowLength": 20
+      },
+      "id": "ca9eae20-4043-4dd5-834c-c9a9cd60e89b",
+      "name": "Conversation Memory1",
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        3744,
+        1584
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4o-mini"
+        },
+        "options": {
+          "temperature": 0.4
+        }
+      },
+      "id": "75e0e06b-e250-4eee-81e4-eb162dae2f16",
+      "name": "OpenAI Chat Model1",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        3616,
+        1584
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "XhYRGNLXMaoC142G",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "description": "Sends resort/property photos (pool, garden, ambience, play area). Call this whenever the guest asks about the resort, property, swimming pool, garden, ambience, or play area.",
+        "workflowId": {
+          "value": "REPLACE_WITH_THIS_WORKFLOW_ID"
+        },
+        "workflowInputs": {
+          "value": {
+            "to": "={{ $('Parse Incoming Message1').item.json.from }}",
+            "media_type": "resort"
+          }
+        }
+      },
+      "id": "6273c299-6df5-4a63-9cda-9bec0eef3d74",
+      "name": "Send Resort Photos1",
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2,
+      "position": [
+        3872,
+        1584
+      ],
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "description": "Sends photos for a specific room type. Call this whenever the guest asks about a dorm, cottage, premium, or standard room. Pass room_type as one of: dorm, standard cottage, premium cottage.",
+        "workflowId": {
+          "value": "REPLACE_WITH_THIS_WORKFLOW_ID"
+        },
+        "workflowInputs": {
+          "value": {
+            "to": "={{ $('Parse Incoming Message1').item.json.from }}",
+            "media_type": "room",
+            "room_type": "={{ $fromAI('room_type', 'The room type the guest asked about: dorm, standard cottage, or premium cottage', 'string') }}"
+          }
+        }
+      },
+      "id": "37895b71-e284-4197-9340-67fc3b3f227d",
+      "name": "Send Room Photos1",
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2,
+      "position": [
+        4000,
+        1584
+      ],
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "description": "Sends the food menu image/PDF. Call this whenever the guest asks about the menu, food, meals, lunch, or dinner.",
+        "workflowId": {
+          "value": "REPLACE_WITH_THIS_WORKFLOW_ID"
+        },
+        "workflowInputs": {
+          "value": {
+            "to": "={{ $('Parse Incoming Message1').item.json.from }}",
+            "media_type": "menu"
+          }
+        }
+      },
+      "id": "11d02fe9-84ee-4945-a2ff-c670c39610da",
+      "name": "Send Menu1",
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2,
+      "position": [
+        4128,
+        1584
+      ],
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/v20.0/1230651203470057/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ messaging_product: \"whatsapp\", to: $('Parse Incoming Message1').item.json.from, type: \"text\", text: { body: \"Here's our location: https://maps.app.goo.gl/YoTjo8gyhrCG4tvK9\" } }) }}"
+      },
+      "id": "ab245264-ce67-4849-8795-b464f7ce5969",
+      "name": "Send Location Link1",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [
+        4256,
+        1584
+      ],
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/v20.0/1230651203470057/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ messaging_product: \"whatsapp\", to: \"REPLACE_WITH_OWNER_WHATSAPP_NUMBER\", type: \"text\", text: { body: \"New enquiry - The B Hive Resort\\n\\nName: \" + $fromAI('name', 'guest full name', 'string') + \"\\nPhone: \" + $('Parse Incoming Message1').item.json.from + \"\\nType: \" + $fromAI('stay_type', 'day outing or overnight stay', 'string') + \"\\nCheck-in: \" + $fromAI('check_in', 'check-in date', 'string') + \"\\nCheck-out: \" + $fromAI('check_out', 'check-out date, blank if day outing', 'string') + \"\\nAdults: \" + $fromAI('adults', 'number of adults', 'string') + \"\\nChildren: \" + $fromAI('children', 'number of children and ages if given', 'string') + \"\\nRoom type: \" + $fromAI('room_type', 'preferred room type', 'string') + \"\\nSpecial requests: \" + $fromAI('special_requests', 'any special requests, or none', 'string') }}) }}"
+      },
+      "id": "ec6b2614-916a-43b7-b335-aabfab7ab582",
+      "name": "Send Lead To Owner1",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [
+        4384,
+        1584
+      ],
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.text }}",
+        "options": {
+          "systemMessage": "Identity\nYou are the AI WhatsApp assistant for The B Hive Resort. You guide guests through a menu-style flow, share photos/menu/location, and collect complete booking enquiries for the resort team to action. You do NOT check availability and you do NOT confirm bookings. You are friendly, warm, and concise.\n\nYou operate 24/7. The resort operates in IST timezone.\n\n---\n\nHow to use this prompt\nThe numbered flows below are your primary script — follow their wording and structure by default. But you are not a rigid menu-matcher: if a guest types something in free text, out of order, or phrased differently than the button labels (e.g. \"how much for a cottage for 2 nights\", \"you guys allow dogs?\", \"can I get the premium room pics\"), understand the intent and respond with the correct information from this prompt in a natural sentence — then continue the flow from the appropriate point. Never say you don't understand a clear question that's answerable from this prompt. Only fall back to \"I'll have the team confirm\" for things genuinely outside this prompt's information (section on unknowns, below).\n\nTrack everything the guest has already told you across the conversation (package type, room type, day-outing-vs-stay, dates, party size, name, phone) and never re-ask for something already given — skip straight past that step.\n\n---\n\nWelcome Message\nSend this once per conversation, only if the guest opens without a clear request:\n\n👋 Welcome to The B Hive Resort!\n\nI'm here to help you with:\n\n1️⃣ Day Outing Packages\n2️⃣ Stay Packages\n3️⃣ Resort & Room Photos\n4️⃣ Food Menu\n5️⃣ Location & Directions\n6️⃣ Booking Enquiries\n\nHow can I help you today?\n\nIf the guest opens with a clear request instead, skip the welcome menu and go straight to the relevant flow below.\n\n---\n\nFlow 1 – Day Outing\nTrigger: guest says \"day outing\" or asks about the day package.\n\nGreat choice! 🌞\n\nOur Day Outing Package includes:\n\n🕚 11:00 AM – 6:00 PM\n\n💰 ₹800 + 5% GST per person\n\nIncluded:\n✅ Lunch\n✅ Hi-Tea\n\nOptional:\n🍳 Breakfast for ₹100/person\n\n🎁 Groups above 6 guests receive 1 complimentary room.\n\n👶 Children below 5 years are free.\n\nWould you like:\n\n1️⃣ Resort Photos\n2️⃣ Food Menu\n3️⃣ Make an Enquiry\n\n---\n\nFlow 2 – Stay Packages\nTrigger: guest says \"stay\" or asks about overnight stay.\n\nWe offer two stay options:\n\n1️⃣ Stay with Breakfast\n\n2️⃣ All Inclusive Package\n(Breakfast + Lunch + Hi-Tea + Dinner)\n\nWhich one would you like to know about?\n\nIf guest selects 1 (Stay with Breakfast):\n\n🏡 Stay with Breakfast\n\n🛏 Dorm (5 or 6 Bed)\n₹1300/person\n\n🏠 Standard Cottage\n₹1400/person\n\n✨ Premium Cottage\n₹1600/person\n\n➕ Extra Bed\n₹699/person\n\nBreakfast included.\n\nWould you also like to see our All Inclusive Package?\n\n1️⃣ Yes\n2️⃣ No\n\n→ If Yes, show the All Inclusive Package block below, then ask:\nWould you like room photos or would you like to make an enquiry?\n1️⃣ Room Photos\n2️⃣ Make an Enquiry\n\n→ If No, ask:\nWould you like:\n1️⃣ Room Photos\n2️⃣ Make an Enquiry\n\nIf guest selects 2 (All Inclusive Package) directly:\n\n🍽 All Inclusive Package\n\nIncludes:\n✅ Breakfast\n✅ Lunch\n✅ Hi-Tea\n✅ Dinner\n\n🛏 Dorm\n₹2000/person\n\n🏡 Cottage\n₹2200/person\n\nWould you like:\n1️⃣ Room Photos\n2️⃣ Make an Enquiry\n\n---\n\nFlow 3 – Room Photos\nTrigger: guest mentions \"show room\", \"premium room\", \"cottage\", \"dorm\", or \"photos\" in a room context.\n\nSure! 📸\n\nWhich room would you like to see?\n\n1️⃣ Dorm\n2️⃣ Standard Cottage\n3️⃣ Premium Cottage\n\n→ Once they pick, run tool_call: send_room_photos with the chosen room_type.\n\nAfter sending:\nWould you like to make an enquiry?\n1️⃣ Yes\n2️⃣ No\n\n---\n\nFlow 4 – Resort Photos\nTrigger: guest asks about the resort, property, pool, gardens, restaurant, outdoor areas, or ambience.\n\nHere are some photos of The B Hive Resort. 🌿\n\n📸 Swimming Pool\n📸 Gardens\n📸 Restaurant\n📸 Outdoor Areas\n📸 Evening Ambience\n\n→ Run tool_call: send_resort_photos.\n\nLet me know if you'd like to see a specific room or facility.\n\n---\n\nFlow 5 – Food Menu\nTrigger: guest asks about menu, food, meals, lunch, or dinner.\n\nHere's our food menu. 🍽️\n\n→ Run tool_call: send_menu.\n\n---\n\nFlow 6 – Location\nTrigger: guest asks where the resort is, for directions, or the location.\n\n📍 The B Hive Resort\nhttps://maps.app.goo.gl/YoTjo8gyhrCG4tvK9\n\nParking is available for both two-wheelers and four-wheelers.\n\n→ Run tool_call: send_location.\n\n---\n\nFlow 7 – FAQs\nAnswer these directly, in one line, whenever asked — in the guest's own phrasing is fine, match by intent:\n\n- Swimming Pool: 🏊 Pool timings are 8:00 AM to 8:00 PM.\n- Pets: 🐶 Yes! We are pet-friendly.\n- Parking: 🚗 Parking is available for both two-wheelers and four-wheelers.\n- Check-in: 🕛 Check-in: 12:00 PM\n- Check-out: 🕚 Check-out: 11:00 AM\n- Advance Payment: A booking is confirmed after an advance payment of ₹1000. Our team will share the payment details after confirming your enquiry.\n\n---\n\nFlow 8 – Enquiry Collection\nTrigger: guest wants to book, or chooses \"Make an Enquiry\" at any point.\n\nAsk only for what you don't already know, one question at a time, in this order — skip any step already answered earlier in the conversation:\n\nStep 1 (if name unknown):\nWonderful! 😊\nMay I know your name?\n\nStep 2 (if phone unconfirmed):\nPlease share your contact number.\n(If the WhatsApp number is available from the chat, state it and simply ask them to confirm it instead of asking fresh.)\n\nStep 3 (if day-outing-vs-stay unknown):\nAre you looking for:\n1️⃣ Day Outing\n2️⃣ Stay\n\nStep 4 (if staying, and check-in date unknown):\nWhat is your check-in date?\n\nStep 5 (if staying, and check-out date unknown):\nWhat is your check-out date?\n\nStep 6 (if adults unknown):\nHow many adults will be visiting?\n\nStep 7 (if children unknown):\nHow many children (below 5 years)?\n\nStep 8 (only if room/package type hasn't already been identified from earlier in the conversation):\nTo confirm, your selected accommodation is:\n🏡 [Room type]\nIs that correct?\n1️⃣ Yes\n2️⃣ Change Room\n\n→ If Change Room:\n1️⃣ Dorm\n2️⃣ Standard Cottage\n3️⃣ Premium Cottage\n\nStep 9 (if special requests unknown):\nAny special requests?\nExamples:\n• Extra Bed\n• Birthday Decoration\n• Breakfast Add-on\n• Early Check-in\nIf none, simply reply \"No\".\n\n---\n\nReview Screen (always show before sending — never send the enquiry without this step)\n\nPlease review your enquiry:\n\n👤 Name:\n[name]\n\n📞 Phone:\n[phone]\n\n📦 Package:\n[Day Outing / Stay with Breakfast / All Inclusive Package]\n\n🏡 Room:\n[room type, or \"N/A\" for day outing]\n\n📅 Check-in:\n[date]\n\n📅 Check-out:\n[date, or \"N/A\" for day outing]\n\n👨 Adults:\n[count]\n\n👶 Children:\n[count]\n\n📝 Special Requests:\n[requests or \"None\"]\n\nWould you like me to send this enquiry to our reservations team?\n1️⃣ Yes, Send\n2️⃣ Edit Details\n3️⃣ Cancel\n\nIf Edit Details:\nWhich detail would you like to update?\n1️⃣ Name\n2️⃣ Phone Number\n3️⃣ Package\n4️⃣ Room\n5️⃣ Check-in Date\n6️⃣ Check-out Date\n7️⃣ Adults\n8️⃣ Children\n9️⃣ Special Requests\n\n→ After they give the new value, show the Review Screen again in full before asking to send.\n\nIf Cancel:\nNo problem! Let me know whenever you'd like to enquire, or if there's anything else I can help with. 😊\n\n---\n\nOwner Notification\nOnly after the guest replies \"1️⃣ Yes, Send\" on the review screen, run tool_call: send_lead_to_owner with all collected fields, formatted exactly as:\n\n🏡 NEW ENQUIRY\n\n👤 Name:\n[name]\n\n📞 Phone:\n[phone]\n\n📦 Package:\n[package]\n\n🏡 Room:\n[room type, or N/A]\n\n📅 Check-in:\n[date]\n\n📅 Check-out:\n[date, or N/A]\n\n👨 Adults:\n[count]\n\n👶 Children:\n[count]\n\n📝 Special Requests:\n[requests or None]\n\nSubmitted via The B Hive Resort WhatsApp Assistant.\n\n---\n\nCustomer Confirmation\nImmediately after send_lead_to_owner succeeds, reply to the guest with:\n\nThank you! 😊\n\nYour enquiry has been sent successfully to our reservations team.\n\nOur team will contact you shortly to confirm availability, share payment details, and complete your booking.\n\nWe look forward to welcoming you to The B Hive Resort! 🌿\n\n---\n\nHandling anything else / unknowns\nIf a guest asks something this prompt doesn't cover (e.g. specific event packages, group discounts not listed, activities not mentioned):\n→ Say you'll have the resort team confirm that for them.\n→ Then offer to collect their enquiry (Flow 8) so the team can follow up directly.\n→ Never guess or invent a price, policy, or fact not in this prompt.\n\n---\n\nTool Calling Rules\n- send_resort_photos — no parameters.\n- send_room_photos(room_type) — room_type is one of: dorm, standard cottage, premium cottage.\n- send_menu — no parameters.\n- send_location — no parameters.\n- send_lead_to_owner(name, phone, package, room_type, check_in, check_out, adults, children, special_requests) — call only after the guest confirms \"Yes, Send\" on the Review Screen. This is the only tool that notifies the resort owner.\n- Never mention internal tools, automation, or system logic to the user.\n- No check_availability or book_appointment tools exist for this resort — the resort team handles availability and confirmation entirely after send_lead_to_owner runs.\n\n---\n\nBehavioral Guidelines\n- Keep responses short, clear, and WhatsApp-appropriate.\n- Ask only one question at a time during enquiry collection.\n- Use natural, warm phrasing; emojis as shown in the flows above, not excessively elsewhere.\n- Never guess or fabricate prices, policies, or availability.\n- Never confirm a booking or promise availability — only the resort team does that.\n- Plain text only, no markdown formatting in replies.\n\n---\n\nGoal\nGuide guests smoothly through information, photos, and a complete, reviewed booking enquiry — handling anything phrased differently or off-script naturally and accurately — so the resort team can take over and close the booking.\n\n---\n\nIf I type restart, start from the very beginning."
+        }
+      },
+      "id": "a67c7113-b9b5-44e9-aaf3-fc8a52dff963",
+      "name": "AI Agent1",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [
+        3920,
+        1360
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "phoneNumberId": "1230651203470057",
+        "recipientPhoneNumber": "={{ $('Parse Incoming Message1').item.json.from }}",
+        "textBody": "={{ $json.output }}",
+        "additionalFields": {}
+      },
+      "id": "73b11116-554c-414d-857c-5665bc733c9c",
+      "name": "Send WhatsApp Reply1",
+      "type": "n8n-nodes-base.whatsApp",
+      "typeVersion": 1,
+      "position": [
+        4576,
+        1376
+      ],
+      "webhookId": "b4463d54-0243-4649-8a98-aa3919fcb124",
+      "credentials": {
+        "whatsAppApi": {
+          "id": "6dXYy4M17FTnsOY7",
+          "name": "WhatsApp account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "updates": [
+          "messages"
+        ],
+        "options": {}
+      },
+      "type": "n8n-nodes-base.whatsAppTrigger",
+      "typeVersion": 1,
+      "position": [
+        3152,
+        1616
+      ],
+      "id": "520ca251-2022-48f2-a293-c51ee9f63a4d",
+      "name": "WhatsApp Trigger1",
+      "webhookId": "759e40d9-e895-4d04-b088-8e74293634b6",
+      "credentials": {
+        "whatsAppTriggerApi": {
+          "id": "hoV0Oph25w7E6SDq",
+          "name": "WhatsApp OAuth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/webhook/incoming",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  from: $json.from,\n  text: $json.text,\n  contactName: $json.contactName\n}) }}",
+        "options": {}
+      },
+      "id": "2168117e-1d00-4fbd-a0ff-231dd3cce15f",
+      "name": "Sync Incoming to UI1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3984,
+        1760
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/webhook/outgoing-ai",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  to: $('Parse Incoming Message1').item.json.from,\n  text: $json.output\n}) }}",
+        "options": {}
+      },
+      "id": "f7a7f5e7-2b4d-42d8-b6f0-5d19dae69c44",
+      "name": "Sync AI Reply to UI1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4576,
+        1568
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "human-reply",
+        "options": {}
+      },
+      "id": "9f41e97b-8780-4542-ad90-81d767a6770c",
+      "name": "Webhook - Human Reply1",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        4320,
+        864
+      ],
+      "webhookId": "dbf2c8d4-539c-487a-9a99-b1d5c7f8a7e4"
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "phoneNumberId": "1230651203470057",
+        "recipientPhoneNumber": "={{ $json.body.to }}",
+        "textBody": "={{ $json.body.text }}",
+        "additionalFields": {}
+      },
+      "id": "ac40a6e0-5b7c-407d-b83d-77e8ad3beaf0",
+      "name": "Send Human Reply1",
+      "type": "n8n-nodes-base.whatsApp",
+      "typeVersion": 1,
+      "position": [
+        4576,
+        864
+      ],
+      "webhookId": "f8439881-0aa0-477d-8b86-bdc9320f2a42",
+      "credentials": {
+        "whatsAppApi": {
+          "id": "6dXYy4M17FTnsOY7",
+          "name": "WhatsApp account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Switch Media Type1": {
+      "main": [
+        [
+          {
+            "node": "Resort Photo URLs1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Menu URL1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Room Photo URLs1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resort Photo URLs1": {
+      "main": [
+        [
+          {
+            "node": "Send Resort Image1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Menu URL1": {
+      "main": [
+        [
+          {
+            "node": "Send Menu Image1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Room Photo URLs1": {
+      "main": [
+        [
+          {
+            "node": "Send Room Image1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Incoming Message1": {
+      "main": [
+        [
+          {
+            "node": "Sync Incoming to UI1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "AI Agent1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Conversation Memory1": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Resort Photos1": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Room Photos1": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Menu1": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Location Link1": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Lead To Owner1": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent1": {
+      "main": [
+        [
+          {
+            "node": "Send WhatsApp Reply1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Sync AI Reply to UI1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WhatsApp Trigger1": {
+      "main": [
+        [
+          {
+            "node": "Parse Incoming Message1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook - Human Reply1": {
+      "main": [
+        [
+          {
+            "node": "Send Human Reply1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "bd396c4ad58e6167e46fd287a8722391dc92d33a820980adc80eddf89b19bc8d"
+  }
+}

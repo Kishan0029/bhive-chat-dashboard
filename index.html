@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Resort Chat Dashboard</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; display: flex; height: 100vh; background-color: #dadbd4; }
+
+        /* ── Sidebar ── */
+        #sidebar { width: 300px; background: #ffffff; border-right: 1px solid #ddd; overflow-y: auto; flex-shrink: 0; }
+        .contact {
+            padding: 12px 15px;
+            border-bottom: 1px solid #f0f0f0;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            transition: background 0.15s;
+        }
+        .contact:hover { background: #f5f5f5; }
+        .contact.active { background: #ebebeb; }
+
+        /* Avatar circle */
+        .contact-avatar {
+            width: 46px; height: 46px;
+            border-radius: 50%;
+            background: #00a884;
+            color: #fff;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.1rem; font-weight: 700;
+            flex-shrink: 0;
+        }
+
+        /* Text block next to avatar */
+        .contact-info { flex: 1; min-width: 0; }
+        .contact-info strong { display: block; font-size: 0.92rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .contact-info small  { font-size: 0.75rem; color: #888; }
+
+        /* Unread badge — WhatsApp green circle */
+        .unread-badge {
+            background: #25d366;
+            color: #fff;
+            font-size: 0.7rem;
+            font-weight: 700;
+            min-width: 20px; height: 20px;
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            padding: 0 4px;
+            flex-shrink: 0;
+            animation: pop 0.2s ease;
+        }
+        @keyframes pop {
+            0%   { transform: scale(0.4); }
+            70%  { transform: scale(1.15); }
+            100% { transform: scale(1); }
+        }
+
+        /* ── Chat area ── */
+        #chat-area { flex: 1; display: flex; flex-direction: column; background: #efeae2; min-width: 0; }
+        #chat-header { background: #f0f2f5; padding: 15px; border-bottom: 1px solid #ddd; font-weight: bold; flex-shrink: 0; }
+        #messages { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+
+        /* Message bubbles */
+        .msg { max-width: 70%; padding: 8px 12px 4px 12px; border-radius: 8px; line-height: 1.5; word-wrap: break-word; }
+        .msg.incoming { background: #fff; align-self: flex-start; border-top-left-radius: 0; box-shadow: 0 1px 1px rgba(0,0,0,0.08); }
+        .msg.ai       { background: #e1ffc7; align-self: flex-end; border-top-right-radius: 0; border: 1px solid #c9e8b3; box-shadow: 0 1px 1px rgba(0,0,0,0.08); }
+        .msg.human    { background: #dcf8c6; align-self: flex-end; border-top-right-radius: 0; box-shadow: 0 1px 1px rgba(0,0,0,0.08); }
+
+        /* Sender label */
+        .sender-label { font-size: 0.72rem; font-weight: 600; margin-bottom: 3px; display: block; }
+        .msg.incoming .sender-label { color: #128c7e; }
+        .msg.human .sender-label    { color: #075e54; }
+        .msg.ai .sender-label       { color: #075e54; }
+
+        /* Message text — preserve whitespace / newlines */
+        .msg-text { white-space: pre-wrap; font-size: 0.92rem; }
+
+        /* Timestamp row */
+        .msg-meta { display: flex; justify-content: flex-end; align-items: center; gap: 4px; margin-top: 3px; }
+        .msg-time { font-size: 0.68rem; color: #999; }
+
+        /* Input area */
+        #input-area { background: #f0f2f5; padding: 12px 15px; display: flex; gap: 10px; flex-shrink: 0; }
+        #input-area input  { flex: 1; padding: 11px 15px; border: none; border-radius: 20px; outline: none; font-size: 0.95rem; }
+        #input-area button { background: #00a884; color: white; border: none; padding: 10px 22px; border-radius: 20px; cursor: pointer; font-size: 0.95rem; }
+        #input-area button:hover { background: #008f72; }
+
+        /* Mobile responsive */
+        @media (max-width: 640px) {
+            #sidebar { width: 72px; }
+            .contact-info { display: none; }
+            .contact { justify-content: center; }
+            .msg { max-width: 88%; }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="sidebar"></div>
+    <div id="chat-area">
+        <div id="chat-header">Select a conversation</div>
+        <div id="messages"></div>
+        <div id="input-area">
+            <input type="text" id="message-input" placeholder="Type a reply..." disabled>
+            <button id="send-btn" disabled>Send</button>
+        </div>
+    </div>
+
+    <script>
+        const socket = io();
+        let currentPhone = null;
+        let conversations = {};
+        // Track unread counts per phone number
+        const unread = {};
+
+        const sidebar     = document.getElementById('sidebar');
+        const messagesDiv = document.getElementById('messages');
+        const chatHeader  = document.getElementById('chat-header');
+        const input       = document.getElementById('message-input');
+        const sendBtn     = document.getElementById('send-btn');
+
+        // ── Browser notification permission ──────────────────────────────
+        if ('Notification' in window && Notification.permission === 'default') {
+            Notification.requestPermission();
+        }
+
+        function fireNotification(title, body) {
+            if (!('Notification' in window)) return;
+            if (Notification.permission !== 'granted') return;
+            // Only notify if tab is not focused or a different chat is open
+            if (document.hasFocus() && currentPhone === title) return;
+            const n = new Notification(title, {
+                body,
+                icon: 'https://upload.wikimedia.org/wikipedia/commons/6/6b/WhatsApp.svg',
+                badge: 'https://upload.wikimedia.org/wikipedia/commons/6/6b/WhatsApp.svg',
+                silent: true   // we handle sound ourselves
+            });
+            n.onclick = () => { window.focus(); n.close(); };
+        }
+
+        // ── WhatsApp-style chime (Web Audio API — no file needed) ────────
+        let audioCtx = null;
+        function getAudioCtx() {
+            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            return audioCtx;
+        }
+
+        function playNotificationSound() {
+            try {
+                const ctx = getAudioCtx();
+                // WhatsApp chime: two quick sine tones
+                const notes = [
+                    { freq: 1318.5, start: 0,    duration: 0.12, gain: 0.55 },  // E6
+                    { freq: 1567.9, start: 0.11, duration: 0.20, gain: 0.45 },  // G6
+                ];
+                notes.forEach(({ freq, start, duration, gain }) => {
+                    const osc  = ctx.createOscillator();
+                    const env  = ctx.createGain();
+                    osc.connect(env);
+                    env.connect(ctx.destination);
+
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(freq, ctx.currentTime + start);
+
+                    const t0 = ctx.currentTime + start;
+                    env.gain.setValueAtTime(0, t0);
+                    env.gain.linearRampToValueAtTime(gain, t0 + 0.01);          // fast attack
+                    env.gain.exponentialRampToValueAtTime(0.001, t0 + duration); // smooth decay
+
+                    osc.start(t0);
+                    osc.stop(t0 + duration + 0.02);
+                });
+            } catch (e) {
+                // AudioContext blocked (e.g. no user gesture yet) — silent fail
+            }
+        }
+
+        // Unlock AudioContext on first user interaction (browser requirement)
+        document.addEventListener('click', () => getAudioCtx(), { once: true });
+
+        // ── Socket events ─────────────────────────────────────────────────
+        socket.on('initial_data', (data) => {
+            conversations = data;
+            renderSidebar();
+        });
+
+        socket.on('new_message', (data) => {
+            if (!conversations[data.phone]) {
+                conversations[data.phone] = { contactName: data.contactName, messages: [] };
+            }
+
+            const key = data.message.seq ?? data.message.timestamp;
+            const exists = conversations[data.phone].messages.find(m => (m.seq ?? m.timestamp) === key);
+            if (!exists) {
+                conversations[data.phone].messages.push(data.message);
+
+                // Only count INCOMING guest messages as unread when chat isn't open
+                if (data.message.type === 'incoming' && currentPhone !== data.phone) {
+                    unread[data.phone] = (unread[data.phone] || 0) + 1;
+
+                    // Fire browser notification + chime
+                    const name = conversations[data.phone].contactName;
+                    fireNotification(name, data.message.text);
+                    playNotificationSound();
+                }
+            }
+
+            // Bubble this contact to the top (like WhatsApp recency ordering)
+            const entry = conversations[data.phone];
+            delete conversations[data.phone];
+            conversations = { [data.phone]: entry, ...conversations };
+
+            renderSidebar();
+            if (currentPhone === data.phone) renderMessages();
+        });
+
+        // ── Sidebar ───────────────────────────────────────────────────────
+        function getInitials(name) {
+            if (!name) return '?';
+            const parts = name.trim().split(/\s+/);
+            return parts.length >= 2
+                ? (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+                : name.slice(0, 2).toUpperCase();
+        }
+
+        function renderSidebar() {
+            sidebar.innerHTML = '';
+            Object.keys(conversations).forEach(phone => {
+                const conv  = conversations[phone];
+                const count = unread[phone] || 0;
+                const isActive = currentPhone === phone;
+
+                const div = document.createElement('div');
+                div.className = `contact ${isActive ? 'active' : ''}`;
+
+                div.innerHTML = `
+                    <div class="contact-avatar">${getInitials(conv.contactName)}</div>
+                    <div class="contact-info">
+                        <strong>${conv.contactName}</strong>
+                        <small>${phone}</small>
+                    </div>
+                    ${count > 0 ? `<div class="unread-badge">${count}</div>` : ''}
+                `;
+
+                div.onclick = () => selectContact(phone);
+                sidebar.appendChild(div);
+            });
+        }
+
+        function selectContact(phone) {
+            currentPhone = phone;
+            // Clear unread badge when opening chat
+            unread[phone] = 0;
+            chatHeader.innerText = conversations[phone].contactName;
+            input.disabled = false;
+            sendBtn.disabled = false;
+            renderSidebar();
+            renderMessages();
+        }
+
+        // ── Messages ──────────────────────────────────────────────────────
+        function formatTime(ts) {
+            if (!ts) return '';
+            return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+        }
+
+        function renderMessages() {
+            messagesDiv.innerHTML = '';
+
+            const sorted = [...conversations[currentPhone].messages].sort((a, b) => {
+                const seqA = a.seq ?? Infinity;
+                const seqB = b.seq ?? Infinity;
+                if (seqA !== seqB) return seqA - seqB;
+                return new Date(a.timestamp) - new Date(b.timestamp);
+            });
+
+            sorted.forEach(msg => {
+                const div = document.createElement('div');
+                div.className = `msg ${msg.type}`;
+
+                let label = '';
+                if (msg.type === 'ai')       label = 'AI Assistant';
+                if (msg.type === 'human')    label = 'Resort Team';
+                if (msg.type === 'incoming') label = 'Guest';
+
+                const safeText = msg.text
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/\n/g, '<br>');
+
+                div.innerHTML = `
+                    <span class="sender-label">${label}</span>
+                    <span class="msg-text">${safeText}</span>
+                    <div class="msg-meta">
+                        <span class="msg-time">${formatTime(msg.timestamp)}</span>
+                    </div>`;
+                messagesDiv.appendChild(div);
+            });
+
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        // ── Send reply ────────────────────────────────────────────────────
+        sendBtn.onclick = async () => {
+            const text = input.value.trim();
+            if (!text || !currentPhone) return;
+            input.value = '';
+            await fetch('/api/send-reply', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ to: currentPhone, text })
+            });
+        };
+
+        input.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendBtn.click();
+        });
+    </script>
+</body>
+</html>
