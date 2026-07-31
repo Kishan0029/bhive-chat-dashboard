@@ -464,6 +464,58 @@
             border-color: #cbd5e1;
         }
 
+        .takeover-btn {
+            background: #f8fafc;
+            border: 1px solid var(--border-color);
+            color: var(--text-secondary);
+            font-size: 0.78rem;
+            font-weight: 600;
+            padding: 6px 12px;
+            border-radius: 99px;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.15s ease;
+            white-space: nowrap;
+        }
+
+        .takeover-btn:hover {
+            background: #f1f5f9;
+            color: var(--text-primary);
+        }
+
+        .takeover-btn.active {
+            background: #fff7ed;
+            color: #ea580c;
+            border-color: #fdba74;
+        }
+
+        .takeover-banner {
+            background: #fff7ed;
+            border-bottom: 1px solid #fdba74;
+            color: #9a3412;
+            padding: 8px 16px;
+            font-size: 0.82rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            z-index: 10;
+        }
+
+        .resume-ai-btn {
+            background: #ea580c;
+            color: #ffffff;
+            border: none;
+            padding: 4px 10px;
+            border-radius: 99px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+
         .icon-btn.active {
             background: var(--accent-light);
             color: var(--accent-primary);
@@ -788,6 +840,10 @@
                 </div>
             </div>
             <div class="header-actions">
+                <button class="takeover-btn" id="takeover-btn" onclick="toggleTakeover()" title="Toggle Human Takeover">
+                    <span>🧑‍💼</span>
+                    <span id="takeover-text">Takeover from AI</span>
+                </button>
                 <button class="icon-btn active" id="sound-toggle-btn" title="Toggle Notification Sound">
                     <svg xmlns="http://www.w3.org/2000/svg" id="sound-icon-on" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width: 20px; height: 20px;">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M19.114 5.636a9 9 0 0 1 0 12.728M16.463 8.288a5.25 5.25 0 0 1 0 7.424M6.75 8.25l4.72-4.72a.75.75 0 0 1 1.28.53v15.88a.75.75 0 0 1-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.009 9.009 0 0 1 2.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75Z" />
@@ -797,6 +853,12 @@
                     </svg>
                 </button>
             </div>
+        </div>
+
+        <!-- Takeover Banner -->
+        <div id="takeover-banner" class="takeover-banner" style="display: none;">
+            <span>🛑 <b>Human Takeover Active</b> — AI Assistant is paused for this guest. Only staff replies will be sent.</span>
+            <button class="resume-ai-btn" onclick="toggleTakeover(false)">Resume AI 🤖</button>
         </div>
 
         <!-- Messages Area -->
@@ -826,6 +888,7 @@
         const socket = io();
         let currentPhone = null;
         let conversations = {};
+        let takeover = {};
         const unread = {};
         let searchQuery = '';
         let soundEnabled = true;
@@ -907,8 +970,21 @@
 
         // ── Socket Events ────────────────────────────────────────────────────
         socket.on('initial_data', (data) => {
-            conversations = data;
+            if (data.conversations) {
+                conversations = data.conversations;
+                takeover = data.takeover || {};
+            } else {
+                conversations = data;
+            }
             renderSidebar();
+            if (currentPhone) updateTakeoverUI();
+        });
+
+        socket.on('takeover_updated', (data) => {
+            takeover[data.phone] = data.active;
+            if (currentPhone === data.phone) {
+                updateTakeoverUI();
+            }
         });
 
         socket.on('new_message', (data) => {
@@ -1039,6 +1115,7 @@
             
             renderSidebar();
             renderMessages();
+            updateTakeoverUI();
             input.focus();
         }
 
@@ -1112,6 +1189,37 @@
         input.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') sendBtn.click();
         });
+
+        // ── Human Takeover UI & Toggling ─────────────────────────────────────
+        function updateTakeoverUI() {
+            const btn = document.getElementById('takeover-btn');
+            const banner = document.getElementById('takeover-banner');
+            if (!btn || !banner || !currentPhone) return;
+
+            const isTakenOver = !!takeover[currentPhone];
+            if (isTakenOver) {
+                btn.classList.add('active');
+                btn.innerHTML = `<span>🛑</span><span>AI Paused</span>`;
+                banner.style.display = 'flex';
+            } else {
+                btn.classList.remove('active');
+                btn.innerHTML = `<span>🧑‍💼</span><span>Takeover from AI</span>`;
+                banner.style.display = 'none';
+            }
+        }
+
+        async function toggleTakeover(forceValue) {
+            if (!currentPhone) return;
+            const targetValue = forceValue !== undefined ? forceValue : !takeover[currentPhone];
+            takeover[currentPhone] = targetValue;
+            updateTakeoverUI();
+
+            await fetch('/api/toggle-takeover', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ phone: currentPhone, active: targetValue })
+            });
+        }
     </script>
 </body>
 </html>

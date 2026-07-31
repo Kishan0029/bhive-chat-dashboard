@@ -23,6 +23,7 @@ const supabase = createClient(
 
 // ── In-memory store (rebuilt from DB on startup) ───────────────────────────
 const conversations = {};
+const takeover = {}; // phone -> boolean
 let msgSeq = 0;
 
 // Load all past messages from Supabase into memory on startup
@@ -50,9 +51,28 @@ async function loadConversations() {
         });
 
         console.log(`✅ Loaded ${data.length} messages from Supabase`);
+
+        try {
+            const { data: tData } = await supabase.from('takeover_status').select('*');
+            if (tData) {
+                tData.forEach(row => {
+                    if (row.active) takeover[row.phone] = true;
+                });
+            }
+        } catch (e) {}
     } catch (err) {
         console.error('⚠️  Could not load from Supabase (continuing with empty state):', err.message);
     }
+}
+
+async function saveTakeover(phone, active) {
+    try {
+        if (active) {
+            await supabase.from('takeover_status').upsert({ phone, active: true, updated_at: new Date() });
+        } else {
+            await supabase.from('takeover_status').delete().eq('phone', phone);
+        }
+    } catch (e) {}
 }
 
 // Save a single message to Supabase
@@ -139,6 +159,13 @@ app.post('/api/send-reply', async (req, res) => {
         const message = { type: 'human', text, timestamp: new Date(), seq };
         conversations[to].messages.push(message);
 
+        // Automatically activate Human Takeover when staff replies manually
+        if (!takeover[to]) {
+            takeover[to] = true;
+            saveTakeover(to, true);
+            io.emit('takeover_updated', { phone: to, active: true });
+        }
+
         io.emit('new_message', {
             phone:       to,
             message,
@@ -154,9 +181,25 @@ app.post('/api/send-reply', async (req, res) => {
     }
 });
 
-// ── Send all history to a newly connected client ───────────────────────────
+// ── Endpoint 4: Check if Human Takeover is active (for n8n IF node) ────────
+app.get('/api/check-takeover', (req, res) => {
+    const phone = req.query.phone;
+    res.json({ takeover: !!takeover[phone] });
+});
+
+// ── Endpoint 5: Dashboard UI toggles Human Takeover ────────────────────────
+app.post('/api/toggle-takeover', (req, res) => {
+    const { phone, active } = req.body;
+    if (!phone) return res.status(400).json({ success: false });
+    takeover[phone] = !!active;
+    saveTakeover(phone, !!active);
+    io.emit('takeover_updated', { phone, active: !!active });
+    res.json({ success: true, active: !!active });
+});
+
+// ── Send all history and takeover state to a newly connected client ────────
 io.on('connection', (socket) => {
-    socket.emit('initial_data', conversations);
+    socket.emit('initial_data', { conversations, takeover });
 });
 
 // ── Start server after loading history from DB ─────────────────────────────
