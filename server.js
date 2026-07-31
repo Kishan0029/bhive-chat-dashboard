@@ -184,7 +184,7 @@ app.post('/api/send-reply', async (req, res) => {
 // ── Endpoint 4: Check if Human Takeover is active (for n8n IF node) ────────
 app.get('/api/check-takeover', (req, res) => {
     const phone = req.query.phone;
-    res.json({ takeover: !!takeover[phone] });
+    res.json({ takeover: !!takeover[phone], from: phone });
 });
 
 // ── Endpoint 5: Dashboard UI toggles Human Takeover ────────────────────────
