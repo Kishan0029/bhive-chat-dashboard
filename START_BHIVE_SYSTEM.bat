@@ -6,7 +6,7 @@ echo ========================================================
 echo.
 
 echo [1/3] Starting n8n Workflow Automation Server...
-start "n8n Server" cmd /k "n8n"
+start "n8n Server" cmd /k "set N8N_WEBHOOK_URL=https://api.thebhiveresort.in && set WEBHOOK_URL=https://api.thebhiveresort.in && n8n"
 
 echo [2/3] Starting Web Dashboard Node Server (Port 3000)...
 start "B Hive Web Dashboard (Node.js)" cmd /k "cd /d "%~dp0" && node server.js"

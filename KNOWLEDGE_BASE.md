@@ -89,8 +89,8 @@ This automatically opens three command windows and starts:
 ### 💻 Manual Command Line Method (PowerShell)
 Open PowerShell and launch each service in a separate terminal tab:
 ```powershell
-# Tab 1: n8n Server
-n8n
+# Tab 1: n8n Server (MUST pass WEBHOOK_URL so WhatsApp API trigger activates without errors)
+$env:WEBHOOK_URL="https://api.thebhiveresort.in"; $env:N8N_WEBHOOK_URL="https://api.thebhiveresort.in"; n8n
 
 # Tab 2: Node.js Web Dashboard Server
 cd "e:\08_Miscellanious Projects\The B Hive Resort Whatsapp Automation"
@@ -105,6 +105,9 @@ cd "e:\08_Miscellanious Projects\The B Hive Resort Whatsapp Automation"
 
 ## 6. Troubleshooting & Diagnostics
 
+- **Issue: `api.thebhiveresort.in` displays Cloudflare "502 Bad Gateway" OR n8n logs show `"Bad request - please check your parameters"` during workflow activation**
+  - **Cause:** When n8n is started without `WEBHOOK_URL=https://api.thebhiveresort.in`, it attempts to register `http://localhost:5678` as the webhook URL with the Meta WhatsApp Cloud API. Meta rejects non-HTTPS localhost URLs, causing n8n to get stuck in an infinite activation retry loop.
+  - **Fix:** Always launch n8n using `START_BHIVE_SYSTEM.bat` (which sets `WEBHOOK_URL=https://api.thebhiveresort.in` automatically) or pass `$env:WEBHOOK_URL="https://api.thebhiveresort.in"` before running `n8n`.
 - **Issue: `chat.thebhiveresort.in` displays Cloudflare "502 Bad Gateway"**
   - **Cause:** Cloudflare tunnel is running, but `node server.js` is not active on port 3000.
   - **Fix:** Launch `node server.js` in your project folder.
