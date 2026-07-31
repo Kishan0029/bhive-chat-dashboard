@@ -491,6 +491,10 @@
             border-color: #fdba74;
         }
 
+        .btn-text-mobile {
+            display: none;
+        }
+
         .takeover-banner {
             background: #fff7ed;
             border-bottom: 1px solid #fdba74;
@@ -776,7 +780,50 @@
             }
 
             .header-info {
-                max-width: 175px;
+                flex: 1;
+                min-width: 0;
+                max-width: unset;
+            }
+
+            .header-left {
+                flex: 1;
+                min-width: 0;
+            }
+
+            #chat-header {
+                padding: 10px 12px;
+                gap: 8px;
+            }
+
+            .header-actions {
+                gap: 6px;
+                flex-shrink: 0;
+            }
+
+            .takeover-btn {
+                padding: 6px 10px;
+                font-size: 0.74rem;
+                gap: 5px;
+            }
+
+            .btn-text-desktop {
+                display: none;
+            }
+
+            .btn-text-mobile {
+                display: inline;
+            }
+
+            .takeover-banner {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 8px;
+                padding: 8px 12px;
+                font-size: 0.76rem;
+            }
+
+            .takeover-banner span {
+                line-height: 1.35;
             }
         }
     </style>
@@ -842,7 +889,8 @@
             <div class="header-actions">
                 <button class="takeover-btn" id="takeover-btn" onclick="toggleTakeover()" title="Toggle Human Takeover">
                     <span>🧑‍💼</span>
-                    <span id="takeover-text">Takeover from AI</span>
+                    <span class="btn-text-desktop">Takeover from AI</span>
+                    <span class="btn-text-mobile">Takeover</span>
                 </button>
                 <button class="icon-btn active" id="sound-toggle-btn" title="Toggle Notification Sound">
                     <svg xmlns="http://www.w3.org/2000/svg" id="sound-icon-on" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width: 20px; height: 20px;">
@@ -1210,11 +1258,11 @@
             const isTakenOver = !!takeover[currentPhone];
             if (isTakenOver) {
                 btn.classList.add('active');
-                btn.innerHTML = `<span>🛑</span><span>AI Paused</span>`;
+                btn.innerHTML = `<span>🛑</span><span class="btn-text-desktop">AI Paused</span><span class="btn-text-mobile">Paused</span>`;
                 banner.style.display = 'flex';
             } else {
                 btn.classList.remove('active');
-                btn.innerHTML = `<span>🧑‍💼</span><span>Takeover from AI</span>`;
+                btn.innerHTML = `<span>🧑‍💼</span><span class="btn-text-desktop">Takeover from AI</span><span class="btn-text-mobile">Takeover</span>`;
                 banner.style.display = 'none';
             }
         }
