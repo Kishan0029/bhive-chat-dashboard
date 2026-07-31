@@ -399,6 +399,14 @@
             min-width: 0;
         }
 
+        .header-top-line {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: nowrap;
+            min-width: 0;
+        }
+
         .header-name {
             font-weight: 700;
             font-size: 1rem;
@@ -406,16 +414,20 @@
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
+            max-width: 250px;
         }
 
         .header-phone {
-            font-size: 0.78rem;
+            font-size: 0.76rem;
             color: var(--text-secondary);
             display: flex;
             align-items: center;
             gap: 6px;
-            flex-wrap: wrap;
-            margin-top: 1px;
+            flex-wrap: nowrap;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            margin-top: 2px;
         }
 
         .wa-badge {
@@ -792,6 +804,32 @@
             flex: 1;
         }
 
+        /* ── Sidebar Minimal LED Dots ── */
+        .sidebar-led-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            flex-shrink: 0;
+            display: inline-block;
+            transition: transform 0.2s ease;
+            cursor: pointer;
+        }
+        .sidebar-led-dot:hover {
+            transform: scale(1.3);
+        }
+        .led-booking {
+            background: #10b981;
+            box-shadow: 0 0 6px rgba(16, 185, 129, 0.75);
+        }
+        .led-vip {
+            background: #f59e0b;
+            box-shadow: 0 0 6px rgba(245, 158, 11, 0.75);
+        }
+        .led-human {
+            background: #ef4444;
+            box-shadow: 0 0 6px rgba(239, 68, 68, 0.75);
+        }
+
         .badge-text-mobile {
             display: none;
         }
@@ -911,15 +949,25 @@
                 display: none;
             }
 
-            .header-name-row {
+            .header-top-line {
                 gap: 5px;
             }
 
             #active-name {
-                max-width: 120px;
+                max-width: 140px;
                 overflow: hidden;
                 text-overflow: ellipsis;
                 white-space: nowrap;
+                font-size: 0.95rem;
+            }
+
+            .header-phone {
+                flex-wrap: nowrap;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                font-size: 0.70rem;
+                gap: 4px;
             }
         }
     </style>
@@ -972,10 +1020,12 @@
                 </button>
                 <div class="header-avatar" id="active-avatar">?</div>
                 <div class="header-info">
-                    <div class="header-name" id="active-name">Guest Name</div>
+                    <div class="header-top-line">
+                        <span class="header-name" id="active-name">Guest Name</span>
+                        <span id="header-lead-badge"></span>
+                    </div>
                     <div class="header-phone">
                         <span id="active-phone">+91 00000 00000</span>
-                        <span id="header-lead-badge"></span>
                         <span class="wa-badge">
                             <span class="wa-dot"></span>
                             <span>WhatsApp</span>
@@ -1225,7 +1275,7 @@
                         <div class="contact-top-row">
                             <div class="contact-name-row">
                                 <span class="contact-name">${conv.contactName || phone}</span>
-                                ${getLeadStatusBadge(conv, phone)}
+                                ${getLeadStatusBadge(conv, phone, 'sidebar')}
                             </div>
                             <span class="contact-time">${timeStr}</span>
                         </div>
@@ -1251,25 +1301,38 @@
             return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
         }
 
-        function getLeadStatusBadge(conv, phone) {
+        function getLeadStatusBadge(conv, phone, location = 'sidebar') {
             if (!conv) return '';
             const msgs = conv.messages || [];
             const textAll = msgs.map(m => m.text || '').join(' ').toLowerCase();
             const isTakenOver = phone ? !!takeover[phone] : (conv.takeover === true);
             
-            // 1. Human takeover active
+            if (location === 'sidebar') {
+                // 1. Human takeover active -> Red LED Dot only
+                if (isTakenOver) {
+                    return `<span class="sidebar-led-dot led-human" title="Human Needed (Takeover Active)"></span>`;
+                }
+                // 2. Booking Lead -> Green LED Dot only
+                if (textAll.includes('new enquiry') || textAll.includes('review your enquiry') || textAll.includes('enquiry has been sent') || textAll.includes('submitted via the b hive resort') || textAll.includes('make an enquiry')) {
+                    return `<span class="sidebar-led-dot led-booking" title="Booking Lead"></span>`;
+                }
+                // 3. VIP / Group 6+ -> Gold LED Dot only
+                if (textAll.includes('adults:\\n 6') || textAll.includes('adults:\\n 7') || textAll.includes('adults:\\n 8') || textAll.includes('groups above 6') || textAll.includes('corporate') || textAll.includes('wedding')) {
+                    return `<span class="sidebar-led-dot led-vip" title="VIP / Group 6+"></span>`;
+                }
+                return '';
+            }
+
+            // Chat Header (Full pill with text + dot)
             if (isTakenOver) {
                 return `<span class="lead-badge lead-badge-human" title="Human Takeover Active"><span class="badge-dot"></span><span class="badge-text-desktop">Human Needed</span><span class="badge-text-mobile">Human</span></span>`;
             }
-            // 2. Booking Lead (Enquiry completed or requested)
             if (textAll.includes('new enquiry') || textAll.includes('review your enquiry') || textAll.includes('enquiry has been sent') || textAll.includes('submitted via the b hive resort') || textAll.includes('make an enquiry')) {
                 return `<span class="lead-badge lead-badge-booking" title="Booking Lead"><span class="badge-dot"></span><span class="badge-text-desktop">Booking Lead</span><span class="badge-text-mobile">Booking</span></span>`;
             }
-            // 3. VIP / Group 6+
             if (textAll.includes('adults:\\n 6') || textAll.includes('adults:\\n 7') || textAll.includes('adults:\\n 8') || textAll.includes('groups above 6') || textAll.includes('corporate') || textAll.includes('wedding')) {
                 return `<span class="lead-badge lead-badge-vip" title="VIP / Group 6+"><span class="badge-dot"></span><span class="badge-text-desktop">VIP Group</span><span class="badge-text-mobile">Group</span></span>`;
             }
-            // 4. Default Browsing -> ZERO CLUTTER (no badge shown)
             return '';
         }
 
@@ -1287,9 +1350,17 @@
             messagesDiv.style.display = 'flex';
             inputContainer.style.display = 'block';
             
-            document.getElementById('active-name').innerText = conversations[phone].contactName || phone;
-            document.getElementById('header-lead-badge').innerHTML = getLeadStatusBadge(conversations[phone], phone);
-            document.getElementById('active-phone').innerText = `+${phone}`;
+            const cName = conversations[phone].contactName || phone;
+            document.getElementById('active-name').innerText = cName;
+            document.getElementById('header-lead-badge').innerHTML = getLeadStatusBadge(conversations[phone], phone, 'header');
+            
+            const phoneEl = document.getElementById('active-phone');
+            if (!conversations[phone].contactName || cName === phone || cName === `+${phone}` || /^\d+$/.test(cName)) {
+                phoneEl.style.display = 'none';
+            } else {
+                phoneEl.style.display = 'inline';
+                phoneEl.innerText = `+${phone}`;
+            }
             document.getElementById('active-avatar').innerText = getInitials(conversations[phone].contactName);
             
             input.disabled = false;
@@ -1349,7 +1420,7 @@
 
             if (currentPhone && conversations[currentPhone]) {
                 const badgeEl = document.getElementById('header-lead-badge');
-                if (badgeEl) badgeEl.innerHTML = getLeadStatusBadge(conversations[currentPhone], currentPhone);
+                if (badgeEl) badgeEl.innerHTML = getLeadStatusBadge(conversations[currentPhone], currentPhone, 'header');
             }
 
             messagesDiv.scrollTop = messagesDiv.scrollHeight;
@@ -1388,7 +1459,7 @@
                 conversations[currentPhone].takeover = isTakenOver;
             }
             const badgeEl = document.getElementById('header-lead-badge');
-            if (badgeEl) badgeEl.innerHTML = getLeadStatusBadge(conversations[currentPhone], currentPhone);
+            if (badgeEl) badgeEl.innerHTML = getLeadStatusBadge(conversations[currentPhone], currentPhone, 'header');
             renderSidebar();
 
             if (isTakenOver) {
