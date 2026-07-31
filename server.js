@@ -197,6 +197,27 @@ app.post('/api/toggle-takeover', (req, res) => {
     res.json({ success: true, active: !!active });
 });
 
+// ── Endpoint 6: Update Guest Contact Name (called by n8n AI tool) ──────────
+app.post('/api/update-contact-name', async (req, res) => {
+    const { phone, name } = req.body;
+    if (!phone || !name) return res.status(400).json({ success: false });
+
+    if (conversations[phone]) {
+        conversations[phone].contactName = name;
+    } else {
+        conversations[phone] = { contactName: name, messages: [] };
+    }
+
+    try {
+        await supabase.from('messages').update({ contact_name: name }).eq('phone', phone);
+    } catch (e) {
+        console.error('⚠️  Supabase contact name update failed:', e.message);
+    }
+
+    io.emit('contact_name_updated', { phone, name });
+    res.json({ success: true, phone, name });
+});
+
 // ── Send all history and takeover state to a newly connected client ────────
 io.on('connection', (socket) => {
     socket.emit('initial_data', { conversations, takeover });

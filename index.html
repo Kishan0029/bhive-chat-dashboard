@@ -987,6 +987,17 @@
             }
         });
 
+        socket.on('contact_name_updated', (data) => {
+            if (conversations[data.phone]) {
+                conversations[data.phone].contactName = data.name;
+                renderSidebar();
+                if (currentPhone === data.phone) {
+                    document.getElementById('active-name').innerText = data.name;
+                    document.getElementById('active-avatar').innerText = getInitials(data.name);
+                }
+            }
+        });
+
         socket.on('new_message', (data) => {
             if (!conversations[data.phone]) {
                 conversations[data.phone] = { contactName: data.contactName, messages: [] };
