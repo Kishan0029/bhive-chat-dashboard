@@ -99,9 +99,10 @@ app.get('/', (req, res) => {
 
 const NON_NAME_WORDS = new Set([
     'hi', 'hello', 'hey', 'hi bro', 'hello bro', 'yes', 'no', 'ok', 'okay', 'sure', 'thanks', 'thank you',
-    'day outing', 'stay', 'dorm', 'standard cottage', 'premium cottage', 'cottage',
-    'resort photos', 'room photos', 'food menu', 'menu', 'location', 'directions',
-    'make an enquiry', 'enquiry', 'booking', 'change room', 'edit details', 'cancel',
+    'day outing', 'day outing packages', 'stay', 'dorm', 'standard cottage', 'premium cottage', 'cottage', 'stay & cottages', 'stay and cottages',
+    'resort photos', 'room photos', 'resort & pool photos', 'food menu', 'menu', 'food & dining menu', 'food and drinks menu', 'location', 'directions', 'location & directions',
+    'make an enquiry', 'enquiry', 'booking', 'change room', 'edit details', 'cancel', 'book room', 'view menu', 'explore resort',
+    'talk to resort team', 'talk to front desk', 'talk to team',
     'none', 'extra bed', 'birthday decoration', 'breakfast add-on', 'early check-in',
     'all inclusive package', 'stay with breakfast', 'yes send', 'send', 'restart'
 ]);
