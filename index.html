@@ -414,6 +414,28 @@
             display: flex;
             align-items: center;
             gap: 6px;
+            flex-wrap: wrap;
+            margin-top: 1px;
+        }
+
+        .wa-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 0.68rem;
+            font-weight: 700;
+            color: var(--accent-primary);
+            background: var(--accent-light);
+            padding: 1px 7px;
+            border-radius: 99px;
+            white-space: nowrap;
+        }
+
+        .wa-dot {
+            width: 5px;
+            height: 5px;
+            border-radius: 50%;
+            background: var(--accent-primary);
         }
 
         .header-actions {
@@ -558,10 +580,11 @@
             display: flex;
             gap: 8px;
             overflow-x: auto;
-            padding-bottom: 8px;
+            padding: 2px 2px 8px 2px;
             margin-bottom: 6px;
             scrollbar-width: none;
             -ms-overflow-style: none;
+            -webkit-overflow-scrolling: touch;
         }
 
         .quick-replies::-webkit-scrollbar {
@@ -574,10 +597,11 @@
             color: var(--text-secondary);
             font-size: 0.78rem;
             font-weight: 600;
-            padding: 6px 12px;
+            padding: 6px 14px;
             border-radius: 99px;
             cursor: pointer;
             white-space: nowrap;
+            flex-shrink: 0;
             transition: all 0.15s ease;
         }
 
@@ -688,6 +712,20 @@
             #input-container {
                 padding: 8px 14px 12px;
             }
+
+            .quick-replies {
+                gap: 6px;
+                padding-bottom: 6px;
+            }
+
+            .quick-pill {
+                padding: 5px 12px;
+                font-size: 0.74rem;
+            }
+
+            .header-info {
+                max-width: 175px;
+            }
         }
     </style>
 </head>
@@ -742,8 +780,10 @@
                     <div class="header-name" id="active-name">Guest Name</div>
                     <div class="header-phone">
                         <span id="active-phone">+91 00000 00000</span>
-                        <span>•</span>
-                        <span style="color: var(--accent-primary); font-weight: 600;">WhatsApp Connected</span>
+                        <span class="wa-badge">
+                            <span class="wa-dot"></span>
+                            <span>WhatsApp</span>
+                        </span>
                     </div>
                 </div>
             </div>
@@ -768,7 +808,7 @@
                 <button class="quick-pill" onclick="insertQuickReply('👋 Hello! How can the Resort Team assist you today?')">👋 Hello</button>
                 <button class="quick-pill" onclick="insertQuickReply('📍 The B Hive Resort is located amidst serene nature. Shall I send Google Maps directions?')">📍 Location</button>
                 <button class="quick-pill" onclick="insertQuickReply('🍽️ Our Day Outing timing is 11 AM to 6 PM with complimentary Lunch & Hi-Tea.')">🍽️ Day Outing</button>
-                <button class="quick-pill" onclick="insertQuickReply('📞 For urgent booking queries, please call our front desk directly.')">📞 Contact Us</button>
+                <button class="quick-pill" onclick="insertQuickReply('📞 For urgent booking queries, please call our front desk directly.')">📞 Contact</button>
             </div>
             <div id="input-area">
                 <input type="text" id="message-input" placeholder="Reply as Resort Team..." disabled>
