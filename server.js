@@ -97,36 +97,59 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// Helper to automatically extract and update guest name from chat flow
+const NON_NAME_WORDS = new Set([
+    'hi', 'hello', 'hey', 'hi bro', 'hello bro', 'yes', 'no', 'ok', 'okay', 'sure', 'thanks', 'thank you',
+    'day outing', 'stay', 'dorm', 'standard cottage', 'premium cottage', 'cottage',
+    'resort photos', 'room photos', 'food menu', 'menu', 'location', 'directions',
+    'make an enquiry', 'enquiry', 'booking', 'change room', 'edit details', 'cancel',
+    'none', 'extra bed', 'birthday decoration', 'breakfast add-on', 'early check-in',
+    'all inclusive package', 'stay with breakfast', 'yes send', 'send', 'restart'
+]);
+
+// Helper to automatically extract and update guest name immediately when entered
 async function autoDetectGuestName(phone, text, isAI) {
     if (!phone || !text || !conversations[phone]) return;
     let newName = null;
 
     if (!isAI) {
-        // Check if message says "my name is X" or "i am X"
-        const nameMatch = text.match(/(?:my name is|i am|this is)\s+([a-zA-Z\s]{2,30})/i);
+        const cleaned = text.trim();
+        // 1. Check if message says "my name is X" or "i am X"
+        const nameMatch = cleaned.match(/(?:my name is|i am|this is)\s+([a-zA-Z\s]{2,30})/i);
         if (nameMatch && nameMatch[1]) {
             newName = nameMatch[1].trim();
         } else {
-            // Check if previous message from AI asked for name
+            // 2. Check if previous AI message asked for name OR if user typed a pure name string
             const msgs = conversations[phone].messages;
+            let aiAskedName = false;
             if (msgs && msgs.length >= 2) {
-                const prevMsg = msgs[msgs.length - 2];
-                if (prevMsg && prevMsg.type === 'ai' && /may i know your name/i.test(prevMsg.text)) {
-                    const cleaned = text.trim();
-                    if (cleaned.length >= 2 && !/^\d+$/.test(cleaned) && cleaned.length <= 40) {
-                        newName = cleaned;
+                for (let i = msgs.length - 2; i >= Math.max(0, msgs.length - 4); i--) {
+                    const m = msgs[i];
+                    if (m && m.type === 'ai' && /(?:name\?|your name|know your name|share your name|name please)/i.test(m.text)) {
+                        aiAskedName = true;
+                        break;
                     }
+                }
+            }
+
+            // If AI asked for name, OR if the cleaned string is a proper 2-30 char word that isn't a command/digit/date
+            if (aiAskedName || (/^[a-zA-Z\s]{2,30}$/.test(cleaned) && !NON_NAME_WORDS.has(cleaned.toLowerCase()) && !/^\d+$/.test(cleaned))) {
+                if (cleaned.length >= 2 && !NON_NAME_WORDS.has(cleaned.toLowerCase())) {
+                    newName = cleaned;
                 }
             }
         }
     } else {
-        // Check if AI message contains "👤 Name:" or "Name:"
-        const match = text.match(/👤\s*Name:\s*([^\n\r]+)/i) || text.match(/^Name:\s*([^\n\r]+)/im);
-        if (match && match[1]) {
-            const extracted = match[1].trim();
-            if (extracted && extracted !== '[name]' && extracted.toLowerCase() !== 'n/a' && extracted.length >= 2) {
-                newName = extracted;
+        // Check if AI message says "Thank you, [Name]!" or contains "👤 Name:"
+        const aiGreeting = text.match(/(?:Thank you|Welcome|Hi|Hello),\s*([a-zA-Z\s]{2,30})[!\.\,]/i);
+        if (aiGreeting && aiGreeting[1] && !NON_NAME_WORDS.has(aiGreeting[1].trim().toLowerCase())) {
+            newName = aiGreeting[1].trim();
+        } else {
+            const match = text.match(/👤\s*Name:\s*([^\n\r]+)/i) || text.match(/^Name:\s*([^\n\r]+)/im);
+            if (match && match[1]) {
+                const extracted = match[1].trim();
+                if (extracted && extracted !== '[name]' && extracted.toLowerCase() !== 'n/a' && extracted.length >= 2) {
+                    newName = extracted;
+                }
             }
         }
     }
