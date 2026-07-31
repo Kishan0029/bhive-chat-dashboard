@@ -962,6 +962,12 @@
                 const nameMatch = (conv.contactName || '').toLowerCase().includes(searchQuery);
                 const phoneMatch = phone.toLowerCase().includes(searchQuery);
                 return nameMatch || phoneMatch;
+            }).sort((a, b) => {
+                const msgsA = conversations[a].messages || [];
+                const msgsB = conversations[b].messages || [];
+                const lastTimeA = msgsA.length > 0 ? new Date(msgsA[msgsA.length - 1].timestamp).getTime() : 0;
+                const lastTimeB = msgsB.length > 0 ? new Date(msgsB[msgsB.length - 1].timestamp).getTime() : 0;
+                return lastTimeB - lastTimeA;
             });
 
             if (keys.length === 0) {
