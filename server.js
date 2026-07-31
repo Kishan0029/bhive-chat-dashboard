@@ -97,6 +97,55 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
+// Helper to automatically extract and update guest name from chat flow
+async function autoDetectGuestName(phone, text, isAI) {
+    if (!phone || !text || !conversations[phone]) return;
+    let newName = null;
+
+    if (!isAI) {
+        // Check if message says "my name is X" or "i am X"
+        const nameMatch = text.match(/(?:my name is|i am|this is)\s+([a-zA-Z\s]{2,30})/i);
+        if (nameMatch && nameMatch[1]) {
+            newName = nameMatch[1].trim();
+        } else {
+            // Check if previous message from AI asked for name
+            const msgs = conversations[phone].messages;
+            if (msgs && msgs.length >= 2) {
+                const prevMsg = msgs[msgs.length - 2];
+                if (prevMsg && prevMsg.type === 'ai' && /may i know your name/i.test(prevMsg.text)) {
+                    const cleaned = text.trim();
+                    if (cleaned.length >= 2 && !/^\d+$/.test(cleaned) && cleaned.length <= 40) {
+                        newName = cleaned;
+                    }
+                }
+            }
+        }
+    } else {
+        // Check if AI message contains "👤 Name:" or "Name:"
+        const match = text.match(/👤\s*Name:\s*([^\n\r]+)/i) || text.match(/^Name:\s*([^\n\r]+)/im);
+        if (match && match[1]) {
+            const extracted = match[1].trim();
+            if (extracted && extracted !== '[name]' && extracted.toLowerCase() !== 'n/a' && extracted.length >= 2) {
+                newName = extracted;
+            }
+        }
+    }
+
+    if (newName && conversations[phone].contactName !== newName) {
+        console.log(`✨ Auto-detected guest name for ${phone}: "${newName}"`);
+        conversations[phone].contactName = newName;
+        io.emit('contact_name_updated', { phone, name: newName });
+        try {
+            await supabase
+                .from('messages')
+                .update({ contact_name: newName })
+                .eq('phone', phone);
+        } catch (e) {
+            console.error('⚠️ Supabase name update failed:', e.message);
+        }
+    }
+}
+
 // ── Endpoint 1: n8n sends incoming WhatsApp messages here ──────────────────
 app.post('/webhook/incoming', async (req, res) => {
     console.log('🔥 INCOMING:', req.body);
@@ -109,6 +158,8 @@ app.post('/webhook/incoming', async (req, res) => {
     const seq     = ++msgSeq;
     const message = { type: 'incoming', text, timestamp: new Date(), seq };
     conversations[from].messages.push(message);
+
+    await autoDetectGuestName(from, text, false);
 
     // Broadcast to UI
     io.emit('new_message', {
@@ -135,6 +186,8 @@ app.post('/webhook/outgoing-ai', async (req, res) => {
     const seq     = msgSeq + 1.5;       // always slots after the last incoming
     const message = { type: 'ai', text, timestamp: new Date(), seq };
     conversations[to].messages.push(message);
+
+    await autoDetectGuestName(to, text, true);
 
     io.emit('new_message', {
         phone:       to,
