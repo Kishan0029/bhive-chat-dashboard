@@ -414,7 +414,7 @@
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
-            max-width: 250px;
+            max-width: 480px;
         }
 
         .header-phone {
@@ -954,11 +954,11 @@
             }
 
             #active-name {
-                max-width: 140px;
+                max-width: calc(100vw - 185px);
                 overflow: hidden;
                 text-overflow: ellipsis;
                 white-space: nowrap;
-                font-size: 0.95rem;
+                font-size: 1rem;
             }
 
             .header-phone {
@@ -1022,14 +1022,10 @@
                 <div class="header-info">
                     <div class="header-top-line">
                         <span class="header-name" id="active-name">Guest Name</span>
-                        <span id="header-lead-badge"></span>
                     </div>
                     <div class="header-phone">
                         <span id="active-phone">+91 00000 00000</span>
-                        <span class="wa-badge">
-                            <span class="wa-dot"></span>
-                            <span>WhatsApp</span>
-                        </span>
+                        <span id="header-lead-badge"></span>
                     </div>
                 </div>
             </div>
