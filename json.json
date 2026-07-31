@@ -498,6 +498,54 @@
           "name": "WhatsApp account"
         }
       }
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=http://localhost:3000/api/check-takeover?phone={{ $json.from }}",
+        "options": {}
+      },
+      "id": "e4a21051-7890-4123-bcde-1234567890ab",
+      "name": "Check Takeover1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3600,
+        1360
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c1a2b3c4-d5e6-7f8a-9b0c-1d2e3f4a5b6c",
+              "leftValue": "={{ $json.takeover }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "f5b32162-8901-5234-cdef-2345678901bc",
+      "name": "Is Human Takeover?1",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3760,
+        1360
+      ]
     }
   ],
   "connections": {
@@ -567,6 +615,29 @@
             "type": "main",
             "index": 0
           },
+          {
+            "node": "Check Takeover1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Takeover1": {
+      "main": [
+        [
+          {
+            "node": "Is Human Takeover?1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Human Takeover?1": {
+      "main": [
+        [],
+        [
           {
             "node": "AI Agent1",
             "type": "main",
