@@ -570,6 +570,7 @@ app.post('/api/send-booking-flow', async (req, res) => {
 
     const payload = {
         messaging_product: 'whatsapp',
+        recipient_type: 'individual',
         to: phone,
         type: 'interactive',
         interactive: {
@@ -590,15 +591,8 @@ app.post('/api/send-booking-flow', async (req, res) => {
                     flow_message_version: '3',
                     flow_token: `booking_${Date.now()}`,
                     flow_id: FLOW_ID,
-                    flow_cta: 'Open Booking Form',
-                    flow_action: 'navigate',
-                    flow_action_payload: {
-                        screen: 'WELCOME',
-                        data: {
-                            // Extract known data from conversations memory if available
-                            name: conversations[phone]?.contactName || ''
-                        }
-                    }
+                    flow_cta: 'Book Now',
+                    mode: 'published'
                 }
             }
         }
