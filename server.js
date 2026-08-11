@@ -1,4 +1,5 @@
 require('dotenv').config();
+const fs = require('fs');
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
@@ -13,6 +14,44 @@ const io = new Server(server, { cors: { origin: '*' } });
 
 app.use(cors());
 app.use(express.json());
+
+// ── Dashboard Authentication (Cookie Based) ───────────────────────────────
+app.get('/login', (req, res) => {
+    res.sendFile(path.join(__dirname, 'login.html'));
+});
+
+app.post('/login', (req, res) => {
+    const { password } = req.body;
+    if (password === '6123') {
+        res.cookie('bhive_auth', 'true', { maxAge: 30 * 24 * 60 * 60 * 1000, httpOnly: true });
+        return res.json({ success: true });
+    }
+    return res.status(401).json({ success: false, message: 'Invalid password' });
+});
+
+app.post('/logout', (req, res) => {
+    res.clearCookie('bhive_auth');
+    res.json({ success: true });
+});
+
+app.use((req, res, next) => {
+    // Skip auth for API routes, Webhooks, and login routes
+    if (req.path.startsWith('/api/') || req.path.startsWith('/webhook/') || req.path === '/login' || req.path === '/logout') {
+        return next();
+    }
+    
+    const cookies = req.headers.cookie || '';
+    if (cookies.includes('bhive_auth=true')) {
+        return next();
+    }
+
+    res.redirect('/login');
+});
+
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
+});
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ── Supabase client ────────────────────────────────────────────────────────
@@ -24,19 +63,30 @@ const supabase = createClient(
 // ── In-memory store (rebuilt from DB on startup) ───────────────────────────
 const conversations = {};
 const takeover = {}; // phone -> boolean
+let blockedUsers = {}; // phone -> boolean
 let msgSeq = 0;
 
 // Load all past messages from Supabase into memory on startup
 async function loadConversations() {
     try {
-        const { data, error } = await supabase
-            .from('messages')
-            .select('*')
-            .order('seq', { ascending: true });
+        let allMessages = [];
+        let fromRow = 0;
+        const limit = 1000;
+        while (true) {
+            const { data, error } = await supabase
+                .from('messages')
+                .select('*')
+                .order('seq', { ascending: true })
+                .range(fromRow, fromRow + limit - 1);
 
-        if (error) throw error;
+            if (error) throw error;
+            if (!data || data.length === 0) break;
+            allMessages = allMessages.concat(data);
+            if (data.length < limit) break;
+            fromRow += limit;
+        }
 
-        data.forEach(row => {
+        allMessages.forEach(row => {
             if (!conversations[row.phone]) {
                 conversations[row.phone] = { contactName: row.contact_name, messages: [] };
             }
@@ -47,12 +97,18 @@ async function loadConversations() {
                 seq:       row.seq
             });
             // Keep msgSeq in sync with highest stored seq
-            if (row.seq > msgSeq) msgSeq = Math.floor(row.seq);
+            if (row.seq > msgSeq) msgSeq = Math.ceil(row.seq);
         });
 
-        console.log(`✅ Loaded ${data.length} messages from Supabase`);
+        console.log(`✅ Loaded ${allMessages.length} messages from Supabase (Max seq: ${msgSeq})`);
 
         try {
+            if (fs.existsSync('takeover.json')) {
+                takeover = JSON.parse(fs.readFileSync('takeover.json', 'utf8')) || {};
+            }
+            if (fs.existsSync('blocked.json')) {
+                blockedUsers = JSON.parse(fs.readFileSync('blocked.json', 'utf8')) || {};
+            }
             const { data: tData } = await supabase.from('takeover_status').select('*');
             if (tData) {
                 tData.forEach(row => {
@@ -68,10 +124,28 @@ async function loadConversations() {
 async function saveTakeover(phone, active) {
     try {
         if (active) {
+            takeover[phone] = true;
+        } else {
+            delete takeover[phone];
+        }
+        fs.writeFileSync('takeover.json', JSON.stringify(takeover, null, 2), 'utf8');
+
+        if (active) {
             await supabase.from('takeover_status').upsert({ phone, active: true, updated_at: new Date() });
         } else {
             await supabase.from('takeover_status').delete().eq('phone', phone);
         }
+    } catch (e) {}
+}
+
+async function saveBlock(phone, active) {
+    try {
+        if (active) {
+            blockedUsers[phone] = true;
+        } else {
+            delete blockedUsers[phone];
+        }
+        fs.writeFileSync('blocked.json', JSON.stringify(blockedUsers, null, 2), 'utf8');
     } catch (e) {}
 }
 
@@ -92,83 +166,87 @@ async function saveMessage(phone, contactName, message) {
     }
 }
 
+// ── Endpoint: Proxy WhatsApp Messages (Intercepts n8n media) ───────────────
+app.post('/api/proxy-whatsapp', async (req, res) => {
+    const body = req.body;
+    
+    // 1. Forward to actual WhatsApp API
+    try {
+        // Always use the token from environment - n8n doesn't pass the Bearer header reliably
+        const waToken = process.env.WHATSAPP_TOKEN || req.headers.authorization?.replace('Bearer ', '');
+        const waRes = await fetch('https://graph.facebook.com/v20.0/1266911389833988/messages', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${waToken}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(body)
+        });
+        
+        const data = await waRes.json();
+        if (!waRes.ok) {
+            console.error('❌ Meta API Proxy Error:', waRes.status, JSON.stringify(data));
+        } else {
+            console.log(`✅ Proxy sent ${body.type} to ${body.to}`);
+        }
+        res.status(waRes.status).json(data);
+
+        
+        // 2. Sync Media to Web UI AFTER successful forward
+        if (waRes.ok && (body.type === 'image' || body.type === 'document' || body.type === 'interactive')) {
+            const to = body.to;
+            let textStr = '';
+            
+            if (body.type === 'image' && body.image) {
+                textStr = `[IMAGE|${body.image.link}]`;
+            } else if (body.type === 'document' && body.document) {
+                textStr = `[DOCUMENT|${body.document.link}|${body.document.filename || 'Document'}]`;
+            } else if (body.type === 'interactive' && body.interactive) {
+                const int = body.interactive;
+                textStr = int.body ? int.body.text : 'Interactive Menu';
+                if (int.type === 'button' && int.action && int.action.buttons) {
+                    textStr += '\n\n' + int.action.buttons.map(b => `[🔘 ${b.reply.title}]`).join(' ');
+                } else if (int.type === 'list' && int.action && int.action.button) {
+                    textStr += '\n\n[📋 ' + int.action.button + ']';
+                }
+            }
+
+            if (textStr) {
+                const seq = ++msgSeq;
+                const message = { type: 'ai', text: textStr, timestamp: new Date(), seq };
+                
+                if (!conversations[to]) {
+                    conversations[to] = { contactName: to, messages: [] };
+                }
+                conversations[to].messages.push(message);
+                
+                io.emit('new_message', {
+                    phone: to,
+                    message,
+                    contactName: conversations[to].contactName
+                });
+                
+                saveMessage(to, conversations[to].contactName, message);
+            }
+        }
+    } catch (e) {
+        console.error('Proxy Error:', e.message);
+        if (!res.headersSent) res.status(500).json({ error: e.message });
+    }
+});
+
 // Serve index.html from root directory
 app.get('/', (req, res) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-const NON_NAME_WORDS = new Set([
-    'hi', 'hello', 'hey', 'hi bro', 'hello bro', 'yes', 'no', 'ok', 'okay', 'sure', 'thanks', 'thank you',
-    'day outing', 'day outing packages', 'stay', 'dorm', 'standard cottage', 'premium cottage', 'cottage', 'stay & cottages', 'stay and cottages',
-    'resort photos', 'room photos', 'resort & pool photos', 'food menu', 'menu', 'food & dining menu', 'food and drinks menu', 'location', 'directions', 'location & directions',
-    'make an enquiry', 'enquiry', 'booking', 'change room', 'edit details', 'cancel', 'book room', 'view menu', 'explore resort',
-    'talk to resort team', 'talk to front desk', 'talk to team',
-    'none', 'extra bed', 'birthday decoration', 'breakfast add-on', 'early check-in',
-    'all inclusive package', 'stay with breakfast', 'yes send', 'send', 'restart'
-]);
+// ── Name display rule ────────────────────────────────────────────────────────
+// Contact names are ONLY set via /api/update-contact-name (called by n8n when
+// the guest explicitly tells the AI their name). Until that happens, the UI
+// shows the guest's phone number. All auto-guessing is intentionally removed.
+// ─────────────────────────────────────────────────────────────────────────────
 
-// Helper to automatically extract and update guest name immediately when entered
-async function autoDetectGuestName(phone, text, isAI) {
-    if (!phone || !text || !conversations[phone]) return;
-    let newName = null;
-
-    if (!isAI) {
-        const cleaned = text.trim();
-        // 1. Check if message says "my name is X" or "i am X"
-        const nameMatch = cleaned.match(/(?:my name is|i am|this is)\s+([a-zA-Z\s]{2,30})/i);
-        if (nameMatch && nameMatch[1]) {
-            newName = nameMatch[1].trim();
-        } else {
-            // 2. Check if previous AI message asked for name OR if user typed a pure name string
-            const msgs = conversations[phone].messages;
-            let aiAskedName = false;
-            if (msgs && msgs.length >= 2) {
-                for (let i = msgs.length - 2; i >= Math.max(0, msgs.length - 4); i--) {
-                    const m = msgs[i];
-                    if (m && m.type === 'ai' && /(?:name\?|your name|know your name|share your name|name please)/i.test(m.text)) {
-                        aiAskedName = true;
-                        break;
-                    }
-                }
-            }
-
-            // If AI asked for name, OR if the cleaned string is a proper 2-30 char word that isn't a command/digit/date
-            if (aiAskedName || (/^[a-zA-Z\s]{2,30}$/.test(cleaned) && !NON_NAME_WORDS.has(cleaned.toLowerCase()) && !/^\d+$/.test(cleaned))) {
-                if (cleaned.length >= 2 && !NON_NAME_WORDS.has(cleaned.toLowerCase())) {
-                    newName = cleaned;
-                }
-            }
-        }
-    } else {
-        // Check if AI message says "Thank you, [Name]!" or contains "👤 Name:"
-        const aiGreeting = text.match(/(?:Thank you|Welcome|Hi|Hello),\s*([a-zA-Z\s]{2,30})[!\.\,]/i);
-        if (aiGreeting && aiGreeting[1] && !NON_NAME_WORDS.has(aiGreeting[1].trim().toLowerCase())) {
-            newName = aiGreeting[1].trim();
-        } else {
-            const match = text.match(/👤\s*Name:\s*([^\n\r]+)/i) || text.match(/^Name:\s*([^\n\r]+)/im);
-            if (match && match[1]) {
-                const extracted = match[1].trim();
-                if (extracted && extracted !== '[name]' && extracted.toLowerCase() !== 'n/a' && extracted.length >= 2) {
-                    newName = extracted;
-                }
-            }
-        }
-    }
-
-    if (newName && conversations[phone].contactName !== newName) {
-        console.log(`✨ Auto-detected guest name for ${phone}: "${newName}"`);
-        conversations[phone].contactName = newName;
-        io.emit('contact_name_updated', { phone, name: newName });
-        try {
-            await supabase
-                .from('messages')
-                .update({ contact_name: newName })
-                .eq('phone', phone);
-        } catch (e) {
-            console.error('⚠️ Supabase name update failed:', e.message);
-        }
-    }
-}
 
 // ── Endpoint 1: n8n sends incoming WhatsApp messages here ──────────────────
 app.post('/webhook/incoming', async (req, res) => {
@@ -179,11 +257,14 @@ app.post('/webhook/incoming', async (req, res) => {
         conversations[from] = { contactName: contactName || from, messages: [] };
     }
 
+    if (contactName && (!conversations[from].contactName || conversations[from].contactName === from || /^\+?\d+$/.test(String(conversations[from].contactName)))) {
+        conversations[from].contactName = contactName;
+        supabase.from('messages').update({ contact_name: contactName }).eq('phone', from).then();
+    }
+
     const seq     = ++msgSeq;
     const message = { type: 'incoming', text, timestamp: new Date(), seq };
     conversations[from].messages.push(message);
-
-    await autoDetectGuestName(from, text, false);
 
     // Broadcast to UI
     io.emit('new_message', {
@@ -195,7 +276,7 @@ app.post('/webhook/incoming', async (req, res) => {
     // Persist to Supabase (non-blocking)
     saveMessage(from, conversations[from].contactName, message);
 
-    res.sendStatus(200);
+    res.json(req.body);
 });
 
 // ── Endpoint 2: n8n sends the AI's outgoing messages here ─────────────────
@@ -207,11 +288,48 @@ app.post('/webhook/outgoing-ai', async (req, res) => {
         conversations[to] = { contactName: to, messages: [] };
     }
 
-    const seq     = msgSeq + 1.5;       // always slots after the last incoming
+    const seq     = ++msgSeq;
     const message = { type: 'ai', text, timestamp: new Date(), seq };
     conversations[to].messages.push(message);
 
-    await autoDetectGuestName(to, text, true);
+
+
+    io.emit('new_message', {
+        phone:       to,
+        message,
+        contactName: conversations[to].contactName
+    });
+
+    saveMessage(to, conversations[to].contactName, message);
+
+
+
+    res.sendStatus(200);
+});
+
+// ── Endpoint: Internal webhook sends media messages here ──────────────────
+app.post('/api/sync-media', async (req, res) => {
+    console.log('🖼️ AI MEDIA:', req.body);
+    const { to, mediaUrl, mediaType, filename } = req.body;
+
+    if (!to || !mediaUrl || !mediaType) return res.sendStatus(400);
+
+    if (!conversations[to]) {
+        conversations[to] = { contactName: to, messages: [] };
+    }
+
+    const seq = ++msgSeq; // Tool runs first, so this gets a lower seq than the final text
+    
+    // Use special formatting so we don't need to change DB schema
+    let textStr = '';
+    if (mediaType === 'image') {
+        textStr = `[IMAGE|${mediaUrl}]`;
+    } else if (mediaType === 'document') {
+        textStr = `[DOCUMENT|${mediaUrl}|${filename || 'Document'}]`;
+    }
+
+    const message = { type: 'ai', text: textStr, timestamp: new Date(), seq };
+    conversations[to].messages.push(message);
 
     io.emit('new_message', {
         phone:       to,
@@ -237,9 +355,11 @@ app.post('/api/send-reply', async (req, res) => {
         conversations[to].messages.push(message);
 
         // Automatically activate Human Takeover when staff replies manually
-        if (!takeover[to]) {
+        const digits = String(to).replace(/\D/g, '');
+        if (!takeover[to] && !takeover[digits]) {
             takeover[to] = true;
-            saveTakeover(to, true);
+            takeover[digits] = true;
+            saveTakeover(digits, true);
             io.emit('takeover_updated', { phone: to, active: true });
         }
 
@@ -260,17 +380,38 @@ app.post('/api/send-reply', async (req, res) => {
 
 // ── Endpoint 4: Check if Human Takeover is active (for n8n IF node) ────────
 app.get('/api/check-takeover', (req, res) => {
-    const phone = req.query.phone;
-    res.json({ takeover: !!takeover[phone], from: phone });
+    const phone = String(req.query.phone || '').trim();
+    const digits = phone.replace(/\D/g, '');
+    const isTakenOver = !!takeover[phone] || !!takeover[digits];
+    const isBlocked = !!blockedUsers[phone] || !!blockedUsers[digits];
+    const blockAI = isTakenOver || isBlocked;
+    console.log(`🔍 Check Takeover/Block for ${phone} (${digits}): Takeover=${isTakenOver}, Blocked=${isBlocked}`);
+    res.json({ takeover: blockAI, blocked: isBlocked, from: phone });
 });
 
 // ── Endpoint 5: Dashboard UI toggles Human Takeover ────────────────────────
 app.post('/api/toggle-takeover', (req, res) => {
     const { phone, active } = req.body;
     if (!phone) return res.status(400).json({ success: false });
-    takeover[phone] = !!active;
-    saveTakeover(phone, !!active);
-    io.emit('takeover_updated', { phone, active: !!active });
+    const cleanPhone = String(phone).trim();
+    const digits = cleanPhone.replace(/\D/g, '');
+    takeover[cleanPhone] = !!active;
+    takeover[digits] = !!active;
+    saveTakeover(digits, !!active);
+    io.emit('takeover_updated', { phone: cleanPhone, active: !!active });
+    res.json({ success: true, active: !!active });
+});
+
+// ── Endpoint 5.5: Dashboard UI toggles Block User ──────────────────────────
+app.post('/api/toggle-block', (req, res) => {
+    const { phone, active } = req.body;
+    if (!phone) return res.status(400).json({ success: false });
+    const cleanPhone = String(phone).trim();
+    const digits = cleanPhone.replace(/\D/g, '');
+    blockedUsers[cleanPhone] = !!active;
+    blockedUsers[digits] = !!active;
+    saveBlock(digits, !!active);
+    io.emit('blocked_updated', { phone: cleanPhone, active: !!active });
     res.json({ success: true, active: !!active });
 });
 
@@ -295,9 +436,202 @@ app.post('/api/update-contact-name', async (req, res) => {
     res.json({ success: true, phone, name });
 });
 
+// ── Meta Flows Endpoint ────────────────────────────────────────────────────
+// Handles data_exchange (final booking submit) and screen navigation from Meta Flows.
+app.post('/api/meta-flow', async (req, res) => {
+    try {
+        const body = req.body;
+        const action = body.action;
+        const screen = body.screen;
+        const data = body.data || {};
+
+        console.log(`[META FLOW] action=${action} screen=${screen}`, JSON.stringify(data));
+
+        // Final submission from REVIEW screen
+        if (action === 'data_exchange') {
+            const leadPayload = {
+                name:             data.name             || 'N/A',
+                phone:            data.phone            || 'N/A',
+                package:          data.package          || data.stay_type || 'N/A',
+                room_type:        data.room_type        || 'N/A',
+                check_in:         data.check_in         || 'N/A',
+                check_out:        data.check_out        || 'N/A',
+                adults:           data.adults           || 'N/A',
+                children:         data.children         || 'None',
+                special_requests: data.special_requests || 'None'
+            };
+
+            // Forward to the same pipeline as AI agent
+            try {
+                await axios.post('http://127.0.0.1:5678/webhook/bhive-send-lead-meta', leadPayload);
+                console.log('[META FLOW] Lead forwarded to n8n successfully.');
+            } catch (err) {
+                console.error('[META FLOW] Failed to forward to n8n:', err.message);
+            }
+
+            // Return SUCCESS screen
+            return res.json({
+                screen: 'SUCCESS',
+                data: {}
+            });
+        }
+
+        // Screen navigation (INIT or navigate actions) — return empty data (static flow)
+        return res.json({
+            screen: screen,
+            data: {}
+        });
+
+    } catch (err) {
+        console.error('[META FLOW] Unhandled error:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ── Endpoint: Send Meta Flow Interactive Message ──────────────────────────
+// Called by the n8n AI agent via the send-booking-form tool.
+app.post('/api/send-booking-flow', async (req, res) => {
+    const { phone } = req.body;
+    if (!phone) return res.status(400).json({ error: 'Phone number is required' });
+
+    // The Meta Flow ID provided by the user
+    const FLOW_ID = process.env.META_FLOW_ID || '1750979676250518';
+
+    const payload = {
+        messaging_product: 'whatsapp',
+        to: phone,
+        type: 'interactive',
+        interactive: {
+            type: 'flow',
+            header: {
+                type: 'text',
+                text: 'The B Hive Resort'
+            },
+            body: {
+                text: 'Tap the button below to quickly fill out your booking details and check availability.'
+            },
+            footer: {
+                text: 'Booking Enquiry'
+            },
+            action: {
+                name: 'flow',
+                parameters: {
+                    flow_message_version: '3',
+                    flow_token: `booking_${Date.now()}`,
+                    flow_id: FLOW_ID,
+                    flow_cta: '📝 Open Booking Form',
+                    flow_action: 'navigate',
+                    flow_action_payload: {
+                        screen: 'WELCOME',
+                        data: {
+                            // Extract known data from conversations memory if available
+                            name: conversations[phone]?.contactName || ''
+                        }
+                    }
+                }
+            }
+        }
+    };
+
+    try {
+        const waToken = process.env.WHATSAPP_TOKEN;
+        const waRes = await fetch('https://graph.facebook.com/v20.0/1266911389833988/messages', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${waToken}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(payload)
+        });
+
+        const data = await waRes.json();
+        
+        if (!waRes.ok) {
+            console.error('❌ Failed to send Flow:', data);
+            return res.status(waRes.status).json({ success: false, error: data });
+        }
+
+        // Add to chat history
+        const message = { type: 'ai', text: '[Interactive Booking Form Sent]', timestamp: new Date(), seq: ++msgSeq };
+        if (conversations[phone]) conversations[phone].messages.push(message);
+        saveMessage(phone, conversations[phone]?.contactName || phone, message);
+
+        res.json({ success: true, message: 'Flow sent successfully', data });
+    } catch (err) {
+        console.error('❌ Error sending Flow:', err.message);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// ── Deduplication State Store for Send Lead To Owner ──────────
+const sentLeads = {}; // phone -> timestamp in ms
+
+// Endpoint: POST /api/send-lead-to-owner
+// Checks if lead was already sent for this guest within the last 24 hours.
+app.post('/api/send-lead-to-owner', async (req, res) => {
+    console.log('--- SEND LEAD REQUEST BODY ---');
+    console.log(JSON.stringify(req.body, null, 2));
+    const { phone } = req.body;
+    const now = Date.now();
+    const ONE_HOUR = 60 * 60 * 1000;
+
+    const digits = phone ? String(phone).replace(/\D/g, '').slice(-10) : null;
+
+    if (digits && sentLeads[digits] && (now - sentLeads[digits]) < ONE_HOUR) {
+        console.log(`[DEDUP] Blocking duplicate send_lead_to_owner for ${digits} (sent ${(now - sentLeads[digits])/1000}s ago)`);
+        return res.json({
+            success: true, // MUST BE TRUE SO AI DOES NOT TRIGGER FIX 4 APOLOGY
+            status: "already_submitted",
+            message: "This booking has ALREADY been sent to our team for this guest earlier today. Do NOT resend or claim to send again. Reply to the guest: 'This booking has already been sent to our team — no need to resend!' and ask if they need anything else."
+        });
+    }
+
+    if (digits) {
+        sentLeads[digits] = now;
+    }
+
+    try {
+        const resp = await axios.post('http://127.0.0.1:5678/webhook/bhive-send-lead-meta', req.body);
+        return res.json({
+            success: true,
+            status: "sent",
+            message: "Lead successfully sent to reservations team."
+        });
+    } catch (err) {
+        console.error('⚠️  Failed to send lead to webhook/bhive-send-lead-meta:', err.message);
+        if (digits) delete sentLeads[digits];
+        return res.status(500).json({
+            success: false,
+            status: "error",
+            message: "Failed to send lead to reservations team: " + err.message
+        });
+    }
+});
+
+// Helper for testing: simulate 1-hour expiration by setting timestamp to 2 hours ago
+app.post('/api/test-expire-lead', (req, res) => {
+    const { phone } = req.body || req.query;
+    const digits = phone ? String(phone).replace(/\D/g, '').slice(-10) : null;
+    if (digits && sentLeads[digits]) {
+        sentLeads[digits] = Date.now() - (2 * 60 * 60 * 1000);
+        return res.json({ success: true, phone, digits, status: "expired_2_hours_ago" });
+    }
+    return res.json({ success: false, message: "No lead found for phone" });
+});
+
+// Helper for testing: clear deduplication flag for phone
+app.post('/api/test-clear-lead', (req, res) => {
+    const { phone } = req.body || req.query;
+    const digits = phone ? String(phone).replace(/\D/g, '').slice(-10) : null;
+    if (digits) {
+        delete sentLeads[digits];
+    }
+    return res.json({ success: true, phone, digits, status: "cleared" });
+});
+
 // ── Send all history and takeover state to a newly connected client ────────
 io.on('connection', (socket) => {
-    socket.emit('initial_data', { conversations, takeover });
+    socket.emit('initial_data', { conversations, takeover, blockedUsers });
 });
 
 // ── Start server after loading history from DB ─────────────────────────────
