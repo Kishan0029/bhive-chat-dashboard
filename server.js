@@ -436,19 +436,79 @@ app.post('/api/update-contact-name', async (req, res) => {
     res.json({ success: true, phone, name });
 });
 
-// ── Meta Flows Endpoint ────────────────────────────────────────────────────
-// Handles data_exchange (final booking submit) and screen navigation from Meta Flows.
+// ── Meta Flows Endpoint (Encrypted) ────────────────────────────────────────
+const crypto = require('crypto');
+
+// The Private Key to decrypt incoming Flow requests
+const PRIVATE_KEY = `-----BEGIN PRIVATE KEY-----
+MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCfVTI/xSPShbpe
+dovc4OlWPZIV/OEDGr+7W8P2/dteN1z+55edVVRf6/No9C8SPhngEobBdnuC/bbS
+0RsXjfkMtTDXxyoNSSMvC4CI7tIN2WjswpxyDt60FehiyusTEFc0N+OuGFkAkrs8
+bOLve3PNhkMYKumlsNOd9l42OvvfEPQOjeruwXxkxhaGUit7iYXab1YLiMoHyApL
+Qhh1CDsVscfnNdaC3Z1PbgpvUKav775wkM3o48hod/xlXYHqD+4ZADgUZJEFvxzF
+RGmoSURPaccywrvT2a05tvov4rMVvH98tF3hGCF6sNgBpU3Q9twEwhHYDjBeHYQI
+EMIuKKAFAgMBAAECggEALBw6gpQR1EUIcQFxvA8aGjGGgYbWRnU/0l9X08e41Q8P
+tFQqUbjfWITqiMpdQ7gkkreeTe3+yKdz105jqTQ5WC7LXFl7h10RnAMbrQ0s4v+n
+ADDqfdsnBYUxJjSWOtthwQeeBUMhVLrKkjJ06ybqyuHaLlUnBSN8mnUr5OiUdU78
+5NkAwRAR1wBMLj94zFMhbTtI+YVIM5VxCAUFFEvQuLtxTljkIKMvb+A7DOHYgAVF
++qhmrHlGqMKsKYKSzpV25d2RtnYEZUBisZ9VKBmc/FWVCEorFDdiSPxJ2tcsQruN
+D0nXvP4RmPoe6/6zJULqFzfDqq5xjZ+cIB9VLgonGwKBgQDMLUgBMopTLdKAGFTe
+47KQU4eRBihxNws0yTbO6bngfq3i+6nWyBbxrTXxxYC2YA7+8UJka9/ZnDLDB1X9
+bSpxajRxPGeILh6X9GcrMxSVSnWmAal8QEUG8poF/CMITaNGA7juj+qKAAyI3B+L
+LjT7J2pFycVZcYL8ztzuZMGwbwKBgQDHxhllNzSZ+LuRxAdJycSbF7JMQF9iZAbz
+agO1fkjF8XMCAqJ54l0Sdu2XRoQ2owegnn2Rtby55JkUUAPbz5GQBchyG3U6+GvQ
+CrTr5Uor7TEe8W7DIyXTF5cpHKEnRCAymKq9qeq9D0jqLsbahF027NLJRuX2Vq90
+3Qf77HXIywKBgHtCatGuPStx4j5KchIMy+OtSY4XdZrDbBR11IydNQV99GOvIhzz
+tkY4FvTaEpYG74ahBz+wj/bDATIT36mamaDWSMqDeM0Rao65kP7XW3m09ck9/59u
+/TzwgGNUj6GXnRXLcX0zjJe659ZHbROM1Zc5eEKhSG5yxGzyRRX15agpAoGBAKe8
+kogksTry2PMMSB5Rlo2ueNuDVVN0r01kX1bdgNcK40j101xJj2I4j0dsQwjpHDdl
+vANDOAJRiaK/iG3gu9TUtjfxDB6GhWe6Bazn6b42Ov9DMoAQG+tBLH+tdTZWAj7Z
+Zss3R0yU7+EJg5foeafrcxTjPaT3pfyWteR153O/AoGALOhDVude+z3080nNdJLV
+Yo4uQhZugOegylcJqQ8guJoyAewFAzPYeV81Og+tfyCc7Jrnb9gl0esywFm03iuA
+uB8kcWQhBA4VaKjAjPkfgELAK25L/t/jpgr1nT4fIp39bdAOk6Tg20K+Oppw8wuC
+z2Y/OGYVLLyOiWAGzrccPB0=
+-----END PRIVATE KEY-----`;
+
 app.post('/api/meta-flow', async (req, res) => {
     try {
-        const body = req.body;
-        const action = body.action;
-        const screen = body.screen;
-        const data = body.data || {};
+        const { encrypted_flow_data, encrypted_aes_key, initial_vector } = req.body;
+        
+        if (!encrypted_flow_data || !encrypted_aes_key || !initial_vector) {
+            return res.status(400).send("Missing encryption parameters");
+        }
 
-        console.log(`[META FLOW] action=${action} screen=${screen}`, JSON.stringify(data));
+        // 1. Decrypt the AES key using our RSA Private Key
+        const decryptedAesKey = crypto.privateDecrypt(
+            {
+                key: PRIVATE_KEY,
+                padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
+                oaepHash: 'sha256'
+            },
+            Buffer.from(encrypted_aes_key, 'base64')
+        );
 
-        // Final submission from REVIEW screen
-        if (action === 'data_exchange') {
+        // 2. Decrypt the flow data payload
+        const iv = Buffer.from(initial_vector, 'base64');
+        const ciphertextBuffer = Buffer.from(encrypted_flow_data, 'base64');
+        // Meta splits auth tag from end of ciphertext (last 16 bytes)
+        const authTag = ciphertextBuffer.slice(ciphertextBuffer.length - 16);
+        const encryptedData = ciphertextBuffer.slice(0, ciphertextBuffer.length - 16);
+
+        const decipher = crypto.createDecipheriv('aes-128-gcm', decryptedAesKey, iv);
+        decipher.setAuthTag(authTag);
+        let decryptedDataStr = decipher.update(encryptedData, undefined, 'utf8');
+        decryptedDataStr += decipher.final('utf8');
+        
+        const body = JSON.parse(decryptedDataStr);
+        console.log(`[META FLOW] Decrypted request:`, body);
+
+        let responseData = {};
+
+        // 3. Handle the Flow logic
+        if (body.action === 'ping') {
+            responseData = { data: { status: 'active' } };
+        } else if (body.action === 'data_exchange') {
+            const data = body.data || {};
             const leadPayload = {
                 name:             data.name             || 'N/A',
                 phone:            data.phone            || 'N/A',
@@ -461,7 +521,7 @@ app.post('/api/meta-flow', async (req, res) => {
                 special_requests: data.special_requests || 'None'
             };
 
-            // Forward to the same pipeline as AI agent
+            // Forward to n8n webhook
             try {
                 await axios.post('http://127.0.0.1:5678/webhook/bhive-send-lead-meta', leadPayload);
                 console.log('[META FLOW] Lead forwarded to n8n successfully.');
@@ -469,22 +529,33 @@ app.post('/api/meta-flow', async (req, res) => {
                 console.error('[META FLOW] Failed to forward to n8n:', err.message);
             }
 
-            // Return SUCCESS screen
-            return res.json({
-                screen: 'SUCCESS',
-                data: {}
-            });
+            responseData = { screen: 'SUCCESS', data: {} };
+        } else {
+            responseData = { screen: body.screen, data: {} };
         }
 
-        // Screen navigation (INIT or navigate actions) — return empty data (static flow)
-        return res.json({
-            screen: screen,
-            data: {}
-        });
+        // 4. Encrypt the response using AES-GCM
+        const responseDataStr = JSON.stringify(responseData);
+        
+        // Flip all bits in the IV for the response IV
+        const responseIv = Buffer.alloc(iv.length);
+        for (let i = 0; i < iv.length; i++) {
+            responseIv[i] = ~iv[i];
+        }
+
+        const cipher = crypto.createCipheriv('aes-128-gcm', decryptedAesKey, responseIv);
+        const encryptedResponse = Buffer.concat([
+            cipher.update(responseDataStr, 'utf8'),
+            cipher.final(),
+            cipher.getAuthTag()
+        ]);
+
+        // Meta requires the response to be a plain base64 string
+        res.send(encryptedResponse.toString('base64'));
 
     } catch (err) {
-        console.error('[META FLOW] Unhandled error:', err.message);
-        res.status(500).json({ error: err.message });
+        console.error('[META FLOW] Encryption/Decryption error:', err.message);
+        res.status(500).send('Encryption error');
     }
 });
 
