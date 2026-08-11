@@ -590,7 +590,7 @@ app.post('/api/send-booking-flow', async (req, res) => {
                     flow_message_version: '3',
                     flow_token: `booking_${Date.now()}`,
                     flow_id: FLOW_ID,
-                    flow_cta: '📝 Open Booking Form',
+                    flow_cta: 'Open Booking Form',
                     flow_action: 'navigate',
                     flow_action_payload: {
                         screen: 'WELCOME',
